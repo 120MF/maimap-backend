@@ -27,13 +27,22 @@ pub fn get_mongodb_client() -> &'static Client {
 #[handler]
 async fn get_arcades_by_id(req: &mut Request, res: &mut Response) {
     let arcade_id = Int32(req.param::<i32>("arcade_id").unwrap_or_default());
-
-    println!("{}", arcade_id);
     let client = get_mongodb_client();
     let coll_arcades: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
-
     match coll_arcades.find_one(doc! { "arcade_id": arcade_id }).await {
-        Ok(Some(arcade)) => res.render(Json(arcade)),
+        Ok(Some(arcade)) => res.render(Json(serde_json::json!(
+            {
+              "arcade_id": arcade.arcade_id,
+              "arcade_name": arcade.arcade_name,
+              "arcade_address": arcade.arcade_address,
+              "arcade_lat": arcade.arcade_lat.to_string().parse::<f64>().unwrap_or(0.0),
+              "arcade_lng": arcade.arcade_lng.to_string().parse::<f64>().unwrap_or(0.0),
+              "arcade_dead": arcade.arcade_dead,
+              "created_at": arcade.created_at.try_to_rfc3339_string().unwrap_or("".parse().unwrap()),
+              "arcade_count": arcade.arcade_count,
+              "arcade_cost": arcade.arcade_cost,
+            }
+        ))),
         Ok(None) => res.render(Json({})),
         Err(e) => {
             res.status_code(StatusCode::BAD_REQUEST);

@@ -8,9 +8,9 @@ pub struct Arcade {
     /// 机厅地址
     pub arcade_address: String,
     /// 单局花销
-    pub arcade_cost: f64,
+    pub arcade_cost: Option<f64>,
     /// 机台数量
-    pub arcade_count: i32,
+    pub arcade_count: Option<i32>,
     /// 机厅存活情况
     pub arcade_dead: bool,
     /// 机厅ID
