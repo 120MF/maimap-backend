@@ -1,19 +1,18 @@
+mod backup;
+mod env;
+use env::{DB_NAME, database_uri};
 mod res;
 mod types;
 
 use types::Arcade;
 
-use mongodb::{
-    Client, Collection, IndexModel, bson::Bson::Int32, bson::Document, bson::doc,
-    bson::oid::ObjectId, options::IndexOptions,
-};
-use salvo::{oapi::extract::JsonBody, prelude::*};
+use mongodb::{Client, Collection, bson::Bson::Int32, bson::doc};
+use salvo::prelude::*;
 use std::sync::OnceLock;
 
+use crate::backup::backup_database;
 use crate::res::ApiResponse;
 use thiserror::Error;
-
-const DB_NAME: &str = "maimap";
 
 // Custom error type for MongoDB operations
 #[derive(Error, Debug)]
@@ -58,11 +57,15 @@ async fn get_arcades_by_id(req: &mut Request, res: &mut Response) {
 async fn main() {
     tracing_subscriber::fmt().init();
 
-    let mongodb_uri = "mongodb://localhost:27017/";
-    let client = Client::with_uri_str(mongodb_uri)
+    let client = Client::with_uri_str(database_uri())
         .await
         .expect("failed to connect");
     MONGODB_CLIENT.set(client).unwrap();
+
+    match backup_database() {
+        Ok(_) => println!("数据库备份成功"),
+        Err(e) => eprintln!("数据库备份失败: {}", e),
+    }
 
     let router =
         Router::with_path("arcades").push(Router::with_path("{arcade_id}").get(get_arcades_by_id));
