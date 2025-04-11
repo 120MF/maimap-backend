@@ -24,3 +24,14 @@ pub async fn get_max_arcade_id() -> i32 {
         _ => 0,
     }
 }
+
+pub async fn insert_many_arcades(arcades: Vec<Arcade>) -> Result<(), mongodb::error::Error> {
+    if arcades.is_empty() {
+        return Ok(());
+    }
+
+    let client = get_mongodb_client();
+    let collection: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
+    collection.insert_many(arcades).await?;
+    Ok(())
+}

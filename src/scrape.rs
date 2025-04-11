@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 #[derive(Deserialize)]
 struct GeocoderResponse {
@@ -42,6 +42,23 @@ impl Default for GeoLocation {
 impl Display for GeoLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{},{}", self.lat, self.lng)
+    }
+}
+
+pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
+    info!("开始爬取华立官网机厅");
+    let content;
+    {
+        let browser = Browser::new(LaunchOptions::default_builder().headless(true).build()?)?;
+        let tab = browser.new_tab()?;
+        tab.navigate_to("http://wc.wahlap.net/maidx/location/index.html")?;
+        tab.wait_until_navigated()?;
+        wait_for_store_list(&tab)?;
+        content = tab.get_content()?;
+    }
+    match parse_store_list(&content).await {
+        Ok(arcade) => {}
+        Err(e) => Err(e),
     }
 }
 
@@ -137,20 +154,4 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
         }
     }
     Ok(arcades)
-}
-pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
-    info!("开始爬取华立官网机厅");
-    let content;
-    {
-        let browser = Browser::new(LaunchOptions::default_builder().headless(true).build()?)?;
-        let tab = browser.new_tab()?;
-        tab.navigate_to("http://wc.wahlap.net/maidx/location/index.html")?;
-        tab.wait_until_navigated()?;
-        wait_for_store_list(&tab)?;
-        content = tab.get_content()?;
-    }
-    match parse_store_list(&content).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e),
-    }
 }
