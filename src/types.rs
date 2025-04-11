@@ -1,10 +1,29 @@
-use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{DateTime, Decimal128};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Point {
+    pub r#type: String,
+    pub coordinates: [f64; 2],
+}
+
+impl Display for Point {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write! {f, "{},{}",self.coordinates[0], self.coordinates[1]}
+    }
+}
+impl Point {
+    pub fn new(lng: f64, lat: f64) -> Self {
+        Self {
+            r#type: "Point".to_string(),
+            coordinates: [lng, lat],
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Arcade {
-    pub _id: Option<ObjectId>,
     /// 机厅地址
     pub arcade_address: String,
     /// 单局花销
@@ -19,6 +38,8 @@ pub struct Arcade {
     pub arcade_lat: Decimal128,
     /// 机厅经度
     pub arcade_lng: Decimal128,
+
+    pub arcade_pos: Option<Point>,
     /// 机厅名
     pub arcade_name: String,
     /// 创建时间
