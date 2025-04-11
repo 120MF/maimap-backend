@@ -17,8 +17,9 @@ use types::Arcade;
 use mongodb::{Client, Collection, bson::Bson::Int32, bson::doc};
 use salvo::prelude::*;
 
-use crate::scrape::scrape_arcades;
+use crate::scrape::{scheduled_scrape, scrape_arcades};
 use thiserror::Error;
+use tracing::{error, info};
 
 // Custom error type for MongoDB operations
 #[derive(Error, Debug)]
@@ -57,20 +58,18 @@ async fn get_arcades_by_id(req: &mut Request, res: &mut Response) {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().init();
-    println!("{}", backup_path());
 
     let client = Client::with_uri_str(database_uri())
         .await
         .expect("failed to connect");
     MONGODB_CLIENT.set(client).unwrap();
 
-    if let Err(e) = backup_database() {
-        eprintln!("数据库备份失败：{}", e);
+    match backup_database() {
+        Ok(_) => info!("数据库备份成功：{}maimap.gz", backup_path()),
+        Err(e) => error!("数据库备份失败：{}", e),
     }
 
-    if let Err(e) = scrape_arcades().await {
-        eprintln!("爬取机厅失败：{}", e);
-    }
+    tokio::spawn(scheduled_scrape());
 
     let router =
         Router::with_path("arcades").push(Router::with_path("{arcade_id}").get(get_arcades_by_id));

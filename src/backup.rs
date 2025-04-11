@@ -10,7 +10,6 @@ pub fn backup_database() -> Result<(), String> {
         .output()
         .map_err(|e| format!("执行备份任务失败：{}", e))?;
     if output.status.success() {
-        println!("数据库备份成功：{}maimap.gz", backup_path());
         Ok(())
     } else {
         Err(format!(

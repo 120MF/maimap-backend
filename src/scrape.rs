@@ -1,6 +1,7 @@
-use crate::db::get_max_arcade_id;
+use crate::db::{get_max_arcade_id, insert_many_arcades};
 use headless_chrome::{Browser, LaunchOptions, Tab};
 
+use crate::backup::backup_database;
 use crate::types::{Arcade, Point};
 use mongodb::bson::{DateTime, Decimal128};
 use scraper::{Html, Selector};
@@ -45,7 +46,28 @@ impl Display for GeoLocation {
     }
 }
 
-pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
+pub async fn scheduled_scrape() {
+    // let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5 * 60 * 60));
+    let mut interval = tokio::time::interval(Duration::from_secs(60));
+
+    loop {
+        interval.tick().await;
+        info!("执行定时爬取华立机厅任务");
+
+        match scrape_arcades().await {
+            Ok(_) => {
+                info!("爬取任务成功！");
+                match backup_database() {
+                    Ok(_) => info!("备份数据库成功！"),
+                    Err(e) => error!("备份数据库失败！{}", e),
+                }
+            }
+            Err(e) => error!("爬取任务失败！{}", e),
+        }
+    }
+}
+
+pub async fn scrape_arcades() -> Result<(), Box<dyn Error + Send + Sync>> {
     info!("开始爬取华立官网机厅");
     let content;
     {
@@ -57,12 +79,15 @@ pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
         content = tab.get_content()?;
     }
     match parse_store_list(&content).await {
-        Ok(arcade) => {}
+        Ok(arcades) => match insert_many_arcades(arcades).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.into()),
+        },
         Err(e) => Err(e),
     }
 }
 
-fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error>> {
+fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error + Send + Sync>> {
     tab.wait_for_element(".store_list")?;
     tab.reload(false, None)?;
     tab.wait_for_element(".store_list")?;
@@ -71,7 +96,9 @@ fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn Error>> {
+async fn get_geo_location(
+    address: &str,
+) -> Result<Option<GeoLocation>, Box<dyn Error + Send + Sync>> {
     let client = reqwest::Client::new();
     let response = client
         .get("https://apis.map.qq.com/ws/geocoder/v1/")
@@ -89,7 +116,7 @@ async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn 
     }
     Ok(None)
 }
-async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
+async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error + Send + Sync>> {
     let time = DateTime::now();
 
     let document = Html::parse_document(html);
@@ -97,8 +124,8 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
     let ul_selector = Selector::parse(".store_list").unwrap();
     let li_selector = Selector::parse("li").unwrap();
 
-    let store_name_selector = Selector::parse("span.store_name")?;
-    let store_address_selector = Selector::parse("span.store_address")?;
+    let store_name_selector = Selector::parse("span.store_name").unwrap();
+    let store_address_selector = Selector::parse("span.store_address").unwrap();
     let max_id = get_max_arcade_id().await;
     info!("max_id: {}", max_id);
 
@@ -106,7 +133,7 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
     for (_, store_list) in document.select(&ul_selector).enumerate() {
         for li in store_list.select(&li_selector) {
             id_counter += 1;
-            if id_counter < max_id {
+            if id_counter <= max_id {
                 continue;
             }
             let store_name = li
