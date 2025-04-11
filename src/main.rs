@@ -1,17 +1,23 @@
 mod backup;
+use backup::backup_database;
+
 mod env;
-use env::{DB_NAME, database_uri};
+use env::{DB_NAME, backup_path, database_uri};
+
+mod db;
+use db::{MONGODB_CLIENT, get_mongodb_client};
 mod res;
+use res::ApiResponse;
+
+mod scrape;
 mod types;
 
 use types::Arcade;
 
 use mongodb::{Client, Collection, bson::Bson::Int32, bson::doc};
 use salvo::prelude::*;
-use std::sync::OnceLock;
 
-use crate::backup::backup_database;
-use crate::res::ApiResponse;
+use crate::scrape::scrape_arcades;
 use thiserror::Error;
 
 // Custom error type for MongoDB operations
@@ -21,11 +27,6 @@ pub enum Error {
     Mongo(#[from] mongodb::error::Error),
     #[error("参数错误：{0}")]
     Param(String),
-}
-static MONGODB_CLIENT: OnceLock<Client> = OnceLock::new();
-#[inline]
-pub fn get_mongodb_client() -> &'static Client {
-    MONGODB_CLIENT.get().unwrap()
 }
 
 #[handler]
@@ -56,15 +57,19 @@ async fn get_arcades_by_id(req: &mut Request, res: &mut Response) {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().init();
+    println!("{}", backup_path());
 
     let client = Client::with_uri_str(database_uri())
         .await
         .expect("failed to connect");
     MONGODB_CLIENT.set(client).unwrap();
 
-    match backup_database() {
-        Ok(_) => println!("数据库备份成功"),
-        Err(e) => eprintln!("数据库备份失败: {}", e),
+    if let Err(e) = backup_database() {
+        eprintln!("数据库备份失败：{}", e);
+    }
+
+    if let Err(e) = scrape_arcades().await {
+        eprintln!("爬取机厅失败：{}", e);
     }
 
     let router =
