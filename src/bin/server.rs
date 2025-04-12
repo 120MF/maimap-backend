@@ -16,11 +16,6 @@ async fn main() {
         .expect("failed to connect");
     MONGODB_CLIENT.set(client).unwrap();
 
-    match backup_database().await {
-        Ok(_) => info!("数据库备份成功。"),
-        Err(e) => error!("数据库备份失败：{}", e),
-    }
-
     let router =
         Router::with_path("arcades").push(Router::with_path("{arcade_id}").get(get_arcades_by_id));
 

@@ -22,14 +22,14 @@ RUN touch src/bin/server.rs src/bin/scrape.rs src/lib.rs && \
 FROM alpine:3.21
 
 # 安装运行依赖
-RUN apk add --no-cache ca-certificates chromium tzdata dcron && \
+RUN apk add --no-cache ca-certificates curl chromium tzdata dcron mongodb-tools && \
     mkdir -p /etc/cron.d /app
 
 # 设置时区
 ENV TZ=Asia/Shanghai
 
 # 创建cron任务
-RUN echo "*/1 * * * * cd /app && /app/scraper >> /app/scraper.log 2>&1" > /etc/cron.d/scraper-cron && \
+RUN echo "0 */5 * * * cd /app && /app/scraper >> /app/scraper.log 2>&1" > /etc/cron.d/scraper-cron && \
     chmod 0644 /etc/cron.d/scraper-cron && \
     crontab /etc/cron.d/scraper-cron
 
@@ -38,6 +38,16 @@ ENV CHROME_PATH=/usr/bin/chromium-browser
 ENV CHROME_DEVEL_SANDBOX=/usr/bin/chrome-devel-sandbox
 
 WORKDIR /app
+
+ARG GITHUB_TOKEN
+ARG ENV_FILE_URL
+
+RUN if [ -z "$GITHUB_TOKEN" ] || [ -z "$ENV_FILE_URL" ]; then \
+    echo "Error: GITHUB_TOKEN and ENV_FILE_URL must be provided"; \
+    exit 1; \
+    fi && \
+    curl -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3.raw" -H "Cache-Control: no-cache" \
+    -o /app/.env -L "${ENV_FILE_URL}"
 
 # 从构建阶段复制二进制文件
 COPY --from=build /app/target/release/server /app/app

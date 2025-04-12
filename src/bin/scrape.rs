@@ -61,7 +61,7 @@ async fn main() {
     match scrape_arcades().await {
         Ok(_) => {
             info!("爬取任务成功！");
-            match backup_database() {
+            match backup_database().await {
                 Ok(_) => info!("备份数据库成功！"),
                 Err(e) => error!("备份数据库失败！{}", e),
             }

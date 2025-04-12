@@ -6,6 +6,7 @@ use ali_oss_rs::Client;
 use ali_oss_rs::object::ObjectOperations;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::info;
 
 pub async fn backup_database() -> Result<String, Box<dyn std::error::Error>> {
     let client = Client::new(
@@ -22,13 +23,13 @@ pub async fn backup_database() -> Result<String, Box<dyn std::error::Error>> {
 
     let filename = format!("maimap_{}.gz", timestamp);
     let filepath = format!("{}{}", backup_path(), filename);
+    info!("备份文件：{}", filepath);
     let output = Command::new("mongodump")
         .arg(format!("--uri={}", database_uri()))
         .arg(format!("--db={}", DB_NAME))
         .arg("--gzip")
         .arg(format!("--archive={}", filepath))
-        .output()
-        .map_err(|e| format!("执行备份任务失败：{}", e))?;
+        .output()?;
     if !output.status.success() {
         let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
         return Err(Box::<dyn std::error::Error>::from(format!(
