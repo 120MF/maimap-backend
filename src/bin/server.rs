@@ -1,7 +1,7 @@
 use maimap_backend::backup::backup_database;
 use maimap_backend::db::MONGODB_CLIENT;
 use maimap_backend::env::{backup_path, database_uri};
-use maimap_backend::handler::get_arcades_by_id;
+use maimap_backend::maimap_handler::get_arcades_by_id;
 
 use mongodb::Client;
 use salvo::prelude::*;
