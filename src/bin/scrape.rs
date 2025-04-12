@@ -103,7 +103,7 @@ async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn 
     let client = reqwest::Client::new();
     let response = client
         .get("https://apis.map.qq.com/ws/geocoder/v1/")
-        .query(&[("address", address), ("key", &*qmap_key())])
+        .query(&[("address", address), ("key", &qmap_key())])
         .send()
         .await?;
     let geocoder_response: GeocoderResponse = response.json().await?;
@@ -169,8 +169,8 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
                 arcade_dead: false,
                 arcade_cost: None,
                 arcade_count: None,
-                arcade_lat: Decimal128::from_str(&*f64::to_string(&location.lat)).unwrap(),
-                arcade_lng: Decimal128::from_str(&*f64::to_string(&location.lng)).unwrap(),
+                arcade_lat: Decimal128::from_str(&location.lat.to_string()).unwrap(),
+                arcade_lng: Decimal128::from_str(&location.lng.to_string()).unwrap(),
                 arcade_pos: Some(location.to_point()),
                 created_at: time,
             };

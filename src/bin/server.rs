@@ -1,47 +1,11 @@
 use maimap_backend::backup::backup_database;
-use maimap_backend::db::{MONGODB_CLIENT, get_mongodb_client};
-use maimap_backend::env::{DB_NAME, backup_path, database_uri};
-use maimap_backend::res::ApiResponse;
-use maimap_backend::types::Arcade;
+use maimap_backend::db::MONGODB_CLIENT;
+use maimap_backend::env::{backup_path, database_uri};
+use maimap_backend::handler::get_arcades_by_id;
 
-use mongodb::{Client, Collection, bson::Bson::Int32, bson::doc};
+use mongodb::Client;
 use salvo::prelude::*;
-use thiserror::Error;
 use tracing::{error, info};
-
-// Custom error type for MongoDB operations
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("MongoDB错误：{0}")]
-    Mongo(#[from] mongodb::error::Error),
-    #[error("参数错误：{0}")]
-    Param(String),
-}
-
-#[handler]
-async fn get_arcades_by_id(req: &mut Request, res: &mut Response) {
-    let arcade_id = match req.param::<i32>("arcade_id") {
-        Some(id) => Int32(id),
-        None => {
-            res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(ApiResponse::<()>::error("缺少arcade_id参数")));
-            return;
-        }
-    };
-    let client = get_mongodb_client();
-    let coll_arcades: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
-    match coll_arcades.find_one(doc! { "arcade_id": arcade_id }).await {
-        Ok(Some(arcade)) => res.render(Json(ApiResponse::success(arcade.to_response()))),
-        Ok(None) => res.render(Json(ApiResponse::success(serde_json::json!({})))),
-        Err(e) => {
-            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-            res.render(Json(ApiResponse::<()>::error(format!(
-                "数据库错误：{:?}",
-                e
-            ))))
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() {
