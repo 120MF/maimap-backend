@@ -74,7 +74,12 @@ pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
     info!("开始爬取华立官网机厅");
     let content;
     {
-        let browser = Browser::new(LaunchOptions::default_builder().headless(true).build()?)?;
+        let browser = Browser::new(
+            LaunchOptions::default_builder()
+                .headless(true)
+                .sandbox(false)
+                .build()?,
+        )?;
         let tab = browser.new_tab()?;
         tab.navigate_to("http://wc.wahlap.net/maidx/location/index.html")?;
         tab.wait_until_navigated()?;

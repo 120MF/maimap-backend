@@ -1,32 +1,57 @@
-# 构建阶段
-FROM rust:slim AS build
+# 构建阶段 - 使用Alpine作为构建基础镜像
+FROM rust:1.86-alpine3.21 AS build
 WORKDIR /app
 
-# 复制依赖文件先构建依赖（利用缓存层）
+# 安装构建依赖
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev perl make
+
+# 分层缓存构建依赖
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && \
-    echo 'fn main() { println!("Placeholder"); }' > src/main.rs && \
-    cargo build --release
+RUN mkdir -p src/bin && \
+    echo "fn main() {}" > src/bin/server.rs && \
+    echo "fn main() {}" > src/bin/scrape.rs && \
+    echo "pub fn dummy() {}" > src/lib.rs && \
+    cargo build --release --features server,scrape
 
-# 复制实际源代码并构建应用
+# 复制实际源代码并重新构建
 COPY src ./src/
-RUN touch src/main.rs && \
-    cargo build --release
+RUN touch src/bin/server.rs src/bin/scrape.rs src/lib.rs && \
+    cargo build --release --features server,scrape
 
-# 运行阶段使用精简基础镜像
-FROM debian:bookworm-slim
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# 运行阶段
+FROM alpine:3.21
 
-# 创建非root用户运行应用
-RUN useradd -ms /bin/bash appuser
-USER appuser
+# 安装运行依赖
+RUN apk add --no-cache ca-certificates chromium tzdata dcron && \
+    mkdir -p /etc/cron.d /app
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+
+# 创建cron任务
+RUN echo "*/1 * * * * cd /app && /app/scraper >> /app/scraper.log 2>&1" > /etc/cron.d/scraper-cron && \
+    chmod 0644 /etc/cron.d/scraper-cron && \
+    crontab /etc/cron.d/scraper-cron
+
+# 指定chromium路径
+ENV CHROME_PATH=/usr/bin/chromium-browser
+ENV CHROME_DEVEL_SANDBOX=/usr/bin/chrome-devel-sandbox
+
 WORKDIR /app
 
 # 从构建阶段复制二进制文件
-COPY --from=build /app/target/release/your_app_name ./app
+COPY --from=build /app/target/release/server /app/app
+COPY --from=build /app/target/release/scrape /app/scraper
+RUN chmod +x /app/app /app/scraper
 
-# 设置容器启动命令
-CMD ["./app"]
+RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
+    echo 'echo "Starting cron service..."' >> /app/entrypoint.sh && \
+    echo 'crond -f &' >> /app/entrypoint.sh && \
+    echo 'echo "Cron service started"' >> /app/entrypoint.sh && \
+    echo 'echo "Running initial scrape..."' >> /app/entrypoint.sh && \
+    echo '/app/scraper' >> /app/entrypoint.sh && \
+    echo 'echo "Starting main application..."' >> /app/entrypoint.sh && \
+    echo 'exec /app/app' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]
