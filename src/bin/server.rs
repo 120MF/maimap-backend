@@ -1,6 +1,6 @@
 use maimap_backend::backup::backup_database;
 use maimap_backend::db::MONGODB_CLIENT;
-use maimap_backend::env::{backup_path, database_uri};
+use maimap_backend::env::database_uri;
 use maimap_backend::maimap_handler::get_arcades_by_id;
 
 use mongodb::Client;
@@ -16,8 +16,8 @@ async fn main() {
         .expect("failed to connect");
     MONGODB_CLIENT.set(client).unwrap();
 
-    match backup_database() {
-        Ok(_) => info!("数据库备份成功：{}maimap.gz", backup_path()),
+    match backup_database().await {
+        Ok(_) => info!("数据库备份成功。"),
         Err(e) => error!("数据库备份失败：{}", e),
     }
 
