@@ -13,16 +13,10 @@ name = "scrape"
 path = "src/bin/scrape.rs"
 required-features = ["scrape"]
 
-[[bin]]
-name = "chrome-installer"
-path = "src/bin/chrome_installer.rs"
-required-features = ["chrome-installer"]
-
 [features]
 default = []
 server = ["salvo", "mongodb"]
 scrape = ["headless_chrome", "scraper", "mongodb", "reqwest"]
-chrome-installer = ["headless_chrome"]
 
 [dependencies]
 salvo = { version = "0.77", optional = true }
@@ -33,6 +27,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 mongodb = { version = "3", optional = true }
 dotenv = "0.15.0"
-headless_chrome = { version = "1.0", features = ["fetch"], optional = true }
+headless_chrome = { version = "1.0", optional = true }
 scraper = { version = "0.23", optional = true }
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }

@@ -5,8 +5,7 @@ use crate::types::Arcade;
 use mongodb::Collection;
 use mongodb::bson::Bson::Int32;
 use mongodb::bson::doc;
-use reqwest::StatusCode;
-use salvo::prelude::Json;
+use salvo::prelude::*;
 use salvo::{Request, Response, handler};
 
 #[handler]
