@@ -29,7 +29,7 @@ RUN apk add --no-cache ca-certificates curl chromium tzdata dcron mongodb-tools 
 ENV TZ=Asia/Shanghai
 
 # 创建cron任务
-RUN echo "0 */5 * * * cd /app && /app/scraper >> /app/scraper.log 2>&1" > /etc/cron.d/scraper-cron && \
+RUN echo "0 */5 * * * cd /app && /app/scraper > /proc/1/fd/1 2>&1" > /etc/cron.d/scraper-cron && \
     chmod 0644 /etc/cron.d/scraper-cron && \
     crontab /etc/cron.d/scraper-cron
 
