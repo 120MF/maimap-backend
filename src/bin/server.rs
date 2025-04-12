@@ -1,23 +1,11 @@
-mod backup;
-use backup::backup_database;
-
-mod env;
-use env::{DB_NAME, backup_path, database_uri};
-
-mod db;
-use db::{MONGODB_CLIENT, get_mongodb_client};
-mod res;
-use res::ApiResponse;
-
-mod scrape;
-mod types;
-
-use types::Arcade;
+use maimap_backend::backup::backup_database;
+use maimap_backend::db::{MONGODB_CLIENT, get_mongodb_client};
+use maimap_backend::env::{DB_NAME, backup_path, database_uri};
+use maimap_backend::res::ApiResponse;
+use maimap_backend::types::Arcade;
 
 use mongodb::{Client, Collection, bson::Bson::Int32, bson::doc};
 use salvo::prelude::*;
-
-use crate::scrape::{scheduled_scrape, scrape_arcades};
 use thiserror::Error;
 use tracing::{error, info};
 
@@ -68,8 +56,6 @@ async fn main() {
         Ok(_) => info!("数据库备份成功：{}maimap.gz", backup_path()),
         Err(e) => error!("数据库备份失败：{}", e),
     }
-
-    tokio::spawn(scheduled_scrape());
 
     let router =
         Router::with_path("arcades").push(Router::with_path("{arcade_id}").get(get_arcades_by_id));

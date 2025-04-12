@@ -1,8 +1,10 @@
-use crate::db::{get_max_arcade_id, insert_many_arcades};
 use headless_chrome::{Browser, LaunchOptions, Tab};
+use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id, insert_many_arcades};
 
-use crate::backup::backup_database;
-use crate::types::{Arcade, Point};
+use maimap_backend::backup::backup_database;
+use maimap_backend::env::database_uri;
+use maimap_backend::types::{Arcade, Point};
+use mongodb::Client;
 use mongodb::bson::{DateTime, Decimal128};
 use scraper::{Html, Selector};
 use serde::Deserialize;
@@ -45,29 +47,29 @@ impl Display for GeoLocation {
         write!(f, "{},{}", self.lat, self.lng)
     }
 }
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt().init();
 
-pub async fn scheduled_scrape() {
-    // let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5 * 60 * 60));
-    let mut interval = tokio::time::interval(Duration::from_secs(60));
+    info!("执行定时爬取华立机厅任务");
+    let client = Client::with_uri_str(database_uri())
+        .await
+        .expect("failed to connect");
+    MONGODB_CLIENT.set(client).unwrap();
 
-    loop {
-        interval.tick().await;
-        info!("执行定时爬取华立机厅任务");
-
-        match scrape_arcades().await {
-            Ok(_) => {
-                info!("爬取任务成功！");
-                match backup_database() {
-                    Ok(_) => info!("备份数据库成功！"),
-                    Err(e) => error!("备份数据库失败！{}", e),
-                }
+    match scrape_arcades().await {
+        Ok(_) => {
+            info!("爬取任务成功！");
+            match backup_database() {
+                Ok(_) => info!("备份数据库成功！"),
+                Err(e) => error!("备份数据库失败！{}", e),
             }
-            Err(e) => error!("爬取任务失败！{}", e),
         }
+        Err(e) => error!("爬取任务失败！{}", e),
     }
 }
 
-pub async fn scrape_arcades() -> Result<(), Box<dyn Error + Send + Sync>> {
+pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
     info!("开始爬取华立官网机厅");
     let content;
     {
@@ -87,7 +89,7 @@ pub async fn scrape_arcades() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 }
 
-fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error + Send + Sync>> {
+fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error>> {
     tab.wait_for_element(".store_list")?;
     tab.reload(false, None)?;
     tab.wait_for_element(".store_list")?;
@@ -96,9 +98,7 @@ fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn get_geo_location(
-    address: &str,
-) -> Result<Option<GeoLocation>, Box<dyn Error + Send + Sync>> {
+async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn Error>> {
     let client = reqwest::Client::new();
     let response = client
         .get("https://apis.map.qq.com/ws/geocoder/v1/")
@@ -116,7 +116,7 @@ async fn get_geo_location(
     }
     Ok(None)
 }
-async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error + Send + Sync>> {
+async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
     let time = DateTime::now();
 
     let document = Html::parse_document(html);

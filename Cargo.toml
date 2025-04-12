@@ -3,8 +3,23 @@ name = "maimap-backend"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+required-features = ["server"]
+
+[[bin]]
+name = "scrape"
+path = "src/bin/scrape.rs"
+required-features = ["scrape"]
+
+[features]
+default = []
+server = ["salvo"]
+scrape = ["headless_chrome", "scraper"]
+
 [dependencies]
-salvo = { version = "0.77", features = ["oapi"] }
+salvo = { version = "0.77", features = ["oapi"], optional = true }
 tokio = { version = "1", features = ["macros"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -13,6 +28,6 @@ serde_json = "1"
 mongodb = "3"
 thiserror = "2"
 dotenv = "0.15.0"
-headless_chrome = { version = "1.0", features = ["fetch"] }
-scraper = "0.23"
+headless_chrome = { version = "1.0", features = ["fetch"], optional = true }
+scraper = { version = "0.23", optional = true }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
