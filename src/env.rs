@@ -10,4 +10,9 @@ pub fn backup_path() -> String {
     dotenv().ok();
     env::var("BACKUP_PATH").unwrap_or("".to_string())
 }
+
+pub fn qmap_key() -> String {
+    dotenv().ok();
+    env::var("QMAP_KEY").unwrap_or("".to_string())
+}
 pub const DB_NAME: &str = "maimap";

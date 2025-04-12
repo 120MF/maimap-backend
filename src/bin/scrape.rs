@@ -2,7 +2,7 @@ use headless_chrome::{Browser, LaunchOptions, Tab};
 use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id, insert_many_arcades};
 
 use maimap_backend::backup::backup_database;
-use maimap_backend::env::database_uri;
+use maimap_backend::env::{database_uri, qmap_key};
 use maimap_backend::types::{Arcade, Point};
 use mongodb::Client;
 use mongodb::bson::{DateTime, Decimal128};
@@ -16,6 +16,7 @@ use tracing::{error, info};
 
 #[derive(Deserialize)]
 struct GeocoderResponse {
+    message: String,
     status: i32,
     result: Option<GeocoderResult>,
 }
@@ -102,10 +103,7 @@ async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn 
     let client = reqwest::Client::new();
     let response = client
         .get("https://apis.map.qq.com/ws/geocoder/v1/")
-        .query(&[
-            ("address", address),
-            ("key", "4BQBZ-6DJWA-MJDKJ-CEHME-I4AL7-IDBK7"),
-        ])
+        .query(&[("address", address), ("key", &*qmap_key())])
         .send()
         .await?;
     let geocoder_response: GeocoderResponse = response.json().await?;
@@ -114,7 +112,7 @@ async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn 
             return Ok(Some(result.location));
         }
     }
-    Ok(None)
+    Err(Box::from(geocoder_response.message))
 }
 async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
     let time = DateTime::now();
