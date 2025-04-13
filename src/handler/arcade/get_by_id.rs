@@ -1,16 +1,15 @@
 use crate::db::get_mongodb_client;
 use crate::env::DB_NAME;
-
 use crate::errors::AppError;
-use anyhow::Result;
-
 use crate::res::ApiResponse;
 use crate::types::Arcade;
+use anyhow::Result;
 use mongodb::Collection;
 use mongodb::bson::Bson::Int32;
 use mongodb::bson::doc;
 use salvo::prelude::*;
-use salvo::{Request, Response, handler};
+
+use crate::handler::common::handle_error;
 
 #[handler]
 pub async fn get_arcade_by_id_handler(req: &mut Request, res: &mut Response) {
@@ -35,17 +34,4 @@ async fn get_arcade_by_id(req: &mut Request) -> Result<serde_json::Value> {
         Some(arcade) => arcade.to_response(),
         None => serde_json::json!({}),
     })
-}
-
-fn handle_error(res: &mut Response, err: anyhow::Error) {
-    if let Some(app_err) = err.downcast_ref::<AppError>() {
-        match app_err {
-            AppError::Validation(_) => res.status_code(StatusCode::BAD_REQUEST),
-            _ => res.status_code(StatusCode::INTERNAL_SERVER_ERROR),
-        };
-    } else {
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    res.render(Json(ApiResponse::<()>::error(err.to_string())));
 }
