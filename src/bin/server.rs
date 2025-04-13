@@ -1,5 +1,5 @@
 use maimap_backend::db::MONGODB_CLIENT;
-use maimap_backend::env::database_uri;
+use maimap_backend::env::{check_required_env_vars, database_uri};
 use maimap_backend::handler::get_arcade_by_id_handler;
 
 use mongodb::Client;
@@ -8,7 +8,7 @@ use salvo::prelude::*;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().init();
-
+    check_required_env_vars();
     let client = Client::with_uri_str(database_uri())
         .await
         .expect("failed to connect");

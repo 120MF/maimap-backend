@@ -2,7 +2,7 @@ use headless_chrome::{Browser, LaunchOptions, Tab};
 
 use maimap_backend::backup::backup_database;
 use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id, insert_many_arcades};
-use maimap_backend::env::{database_uri, qmap_key};
+use maimap_backend::env::{check_required_env_vars, database_uri, qmap_key};
 
 use anyhow::{Context, Result};
 use maimap_backend::errors::AppError;
@@ -58,6 +58,8 @@ async fn main() {
     tracing_subscriber::fmt().init();
 
     info!("执行定时爬取华立机厅任务");
+    check_required_env_vars();
+
     let client = Client::with_uri_str(database_uri())
         .await
         .expect("failed to connect");

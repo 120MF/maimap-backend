@@ -61,3 +61,5 @@ impl Arcade {
         })
     }
 }
+
+pub enum SortMethod {}
