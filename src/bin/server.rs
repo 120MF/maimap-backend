@@ -1,6 +1,6 @@
 use maimap_backend::db::MONGODB_CLIENT;
 use maimap_backend::env::database_uri;
-use maimap_backend::handler::get_arcades_by_id;
+use maimap_backend::handler::get_arcade_by_id_handler;
 
 use mongodb::Client;
 use salvo::prelude::*;
@@ -14,8 +14,8 @@ async fn main() {
         .expect("failed to connect");
     MONGODB_CLIENT.set(client).unwrap();
 
-    let router =
-        Router::with_path("arcades").push(Router::with_path("{arcade_id}").get(get_arcades_by_id));
+    let router = Router::with_path("arcades")
+        .push(Router::with_path("{arcade_id}").get(get_arcade_by_id_handler));
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
     Server::new(acceptor).serve(router).await;
