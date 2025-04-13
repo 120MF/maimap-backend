@@ -1,14 +1,19 @@
 use headless_chrome::{Browser, LaunchOptions, Tab};
-use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id, insert_many_arcades};
 
 use maimap_backend::backup::backup_database;
+use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id, insert_many_arcades};
 use maimap_backend::env::{database_uri, qmap_key};
+
+use anyhow::{Context, Result};
+use maimap_backend::errors::AppError;
+
 use maimap_backend::types::{Arcade, Point};
+
 use mongodb::Client;
 use mongodb::bson::{DateTime, Decimal128};
+
 use scraper::{Html, Selector};
 use serde::Deserialize;
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::time::Duration;
@@ -70,7 +75,7 @@ async fn main() {
     }
 }
 
-pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
+pub async fn scrape_arcades() -> Result<()> {
     info!("开始爬取华立官网机厅");
     let content;
     {
@@ -79,12 +84,14 @@ pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
                 .headless(true)
                 .sandbox(false)
                 .build()?,
-        )?;
-        let tab = browser.new_tab()?;
-        tab.navigate_to("http://wc.wahlap.net/maidx/location/index.html")?;
-        tab.wait_until_navigated()?;
-        wait_for_store_list(&tab)?;
-        content = tab.get_content()?;
+        )
+        .context("运行无头Chrome失败")?;
+        let tab = browser.new_tab().context("新建浏览器Tab失败")?;
+        tab.navigate_to("http://wc.wahlap.net/maidx/location/index.html")
+            .context("导航到指定页面失败")?;
+        tab.wait_until_navigated().context("等待指定页面加载失败")?;
+        wait_for_store_list(&tab).context("等待store_list加载失败")?;
+        content = tab.get_content().context("获取页面content失败")?;
     }
     match parse_store_list(&content).await {
         Ok(arcades) => match insert_many_arcades(arcades).await {
@@ -95,7 +102,7 @@ pub async fn scrape_arcades() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error>> {
+fn wait_for_store_list(tab: &Tab) -> Result<()> {
     tab.wait_for_element(".store_list")?;
     tab.reload(false, None)?;
     tab.wait_for_element(".store_list")?;
@@ -104,7 +111,7 @@ fn wait_for_store_list(tab: &Tab) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn Error>> {
+async fn get_geo_location(address: &str) -> Result<GeoLocation> {
     let client = reqwest::Client::new();
     let response = client
         .get("https://apis.map.qq.com/ws/geocoder/v1/")
@@ -114,22 +121,24 @@ async fn get_geo_location(address: &str) -> Result<Option<GeoLocation>, Box<dyn 
     let geocoder_response: GeocoderResponse = response.json().await?;
     if geocoder_response.status == 0 {
         if let Some(result) = geocoder_response.result {
-            return Ok(Some(result.location));
+            return Ok(result.location);
         }
     }
-    Err(Box::from(geocoder_response.message))
+    Err(AppError::Geocoder(geocoder_response.message).into())
 }
-async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
+async fn parse_store_list(html: &str) -> Result<Vec<Arcade>> {
     let time = DateTime::now();
 
     let document = Html::parse_document(html);
     let mut arcades = Vec::new();
-    let ul_selector = Selector::parse(".store_list").unwrap();
-    let li_selector = Selector::parse("li").unwrap();
+    let ul_selector = Selector::parse(".store_list").map_err(|e| AppError::Parse(e.to_string()))?;
+    let li_selector = Selector::parse("li").map_err(|e| AppError::Parse(e.to_string()))?;
 
-    let store_name_selector = Selector::parse("span.store_name").unwrap();
-    let store_address_selector = Selector::parse("span.store_address").unwrap();
-    let max_id = get_max_arcade_id().await;
+    let store_name_selector =
+        Selector::parse("span.store_name").map_err(|e| AppError::Parse(e.to_string()))?;
+    let store_address_selector =
+        Selector::parse("span.store_address").map_err(|e| AppError::Parse(e.to_string()))?;
+    let max_id = get_max_arcade_id().await?;
     info!("max_id: {}", max_id);
 
     let mut id_counter: i32 = 0;
@@ -137,50 +146,40 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>, Box<dyn Error>> {
         for li in store_list.select(&li_selector) {
             id_counter += 1;
             if id_counter <= max_id {
-                continue;
+                continue; // 只从已有机厅id最大处开始爬取
             }
             let store_name = li
                 .select(&store_name_selector)
                 .next()
                 .map(|el| el.text().collect::<String>().trim().to_string())
-                .unwrap_or_else(|| "未知店名".to_string());
+                .ok_or_else(|| AppError::Parse("store_name".to_string()))?;
 
             let store_address = li
                 .select(&store_address_selector)
                 .next()
                 .map(|el| el.text().collect::<String>().trim().to_string())
-                .unwrap_or_else(|| "未知地址".to_string());
+                .ok_or_else(|| AppError::Parse("store_address".to_string()))?;
 
-            let location;
-            match get_geo_location(&store_address).await {
-                Ok(loc) => location = loc.unwrap_or_default(),
-                Err(e) => {
-                    error!(
-                        "获取腾讯地图API失败，为防止数据污染，放弃本次更新。 Error: {}",
-                        e
-                    );
-                    return Err(e);
-                }
-            }
+            let location = get_geo_location(&store_address).await?;
             info!(
-                "{}\n{}\n{}\n{}\n\n",
+                "\n爬取到新机厅：\n{}\n{}\n{}\n{}\n\n",
                 id_counter, store_name, store_address, location,
             );
 
             let arcade = Arcade {
-                arcade_id: id_counter as i32,
+                arcade_id: id_counter,
                 arcade_name: store_name,
                 arcade_address: store_address,
                 arcade_dead: false,
                 arcade_cost: None,
                 arcade_count: None,
-                arcade_lat: Decimal128::from_str(&location.lat.to_string()).unwrap(),
-                arcade_lng: Decimal128::from_str(&location.lng.to_string()).unwrap(),
+                arcade_lat: Decimal128::from_str(&location.lat.to_string())?,
+                arcade_lng: Decimal128::from_str(&location.lng.to_string())?,
                 arcade_pos: Some(location.to_point()),
                 created_at: time,
             };
             arcades.push(arcade);
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_millis(700)).await; //腾讯地图免费API并发调用限制 3次/s
         }
     }
     Ok(arcades)

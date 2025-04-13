@@ -1,4 +1,7 @@
 use crate::env::DB_NAME;
+
+use anyhow::Result;
+
 use crate::types::Arcade;
 use mongodb::bson::doc;
 use mongodb::{Client, Collection};
@@ -11,7 +14,7 @@ pub fn get_mongodb_client() -> &'static Client {
     MONGODB_CLIENT.get().unwrap()
 }
 
-pub async fn get_max_arcade_id() -> i32 {
+pub async fn get_max_arcade_id() -> Result<i32> {
     let client = get_mongodb_client();
     let collection: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
 
@@ -20,8 +23,9 @@ pub async fn get_max_arcade_id() -> i32 {
         .build();
 
     match collection.find_one(doc! {}).with_options(options).await {
-        Ok(Some(arcade)) => arcade.arcade_id as i32,
-        _ => 0,
+        Ok(None) => Ok(0),
+        Ok(Some(arcade)) => Ok(arcade.arcade_id),
+        Err(e) => Err(e.into()),
     }
 }
 
