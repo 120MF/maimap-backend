@@ -38,15 +38,15 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
     // 创建查询条件
     let mut pipeline: Vec<Document> = Vec::new();
 
-    //名称搜索
-    if let Some(name) = &query.name {
-        pipeline.push(doc! {"$match": {"arcade_name": {"$regex": name}}})
-    }
-
     //地理位置搜索
     match generate_geo_doc(&query)? {
         None => {}
         Some(document) => pipeline.push(document),
+    }
+    
+    //名称搜索
+    if let Some(name) = &query.name {
+        pipeline.push(doc! {"$match": {"arcade_name": {"$regex": name}}})
     }
 
     //构建排序
