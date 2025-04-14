@@ -1,7 +1,7 @@
 use crate::db::get_mongodb_client;
 use crate::env::DB_NAME;
 use crate::errors::AppError;
-use crate::handler::common::handle_error;
+use crate::handler::common::{handle_error, paginate_results};
 use crate::res::ApiResponse;
 use crate::types::Arcade;
 use anyhow::Result;
@@ -11,7 +11,6 @@ use mongodb::options::Collation;
 use mongodb::{Collection, bson};
 use salvo::prelude::*;
 use serde::Deserialize;
-use tracing::info;
 
 #[handler]
 pub async fn search_arcades_handler(req: &mut Request, res: &mut Response) {
@@ -39,8 +38,55 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
     // 创建查询条件
     let mut pipeline: Vec<Document> = Vec::new();
 
+    //名称搜索
+    if let Some(name) = &query.name {
+        pipeline.push(doc! {"$match": {"arcade_name": {"$regex": name}}})
+    }
+
+    //地理位置搜索
+    match generate_geo_doc(&query)? {
+        None => {}
+        Some(document) => pipeline.push(document),
+    }
+
+    //构建排序
+    let collation = Collation::builder().locale("zh").build();
+    let sort_doc = match query.sort.as_deref() {
+        Some("Distance") => doc! {"$sort": {"distance": 1}},
+        Some("Pinyin") => doc! {"$sort": {"arcade_name": 1}},
+        _ => doc! {"$sort": {"arcade_id": 1}},
+    };
+    pipeline.push(sort_doc);
+
+    // 修改字段以符合API要求
+    serialize_data(&mut pipeline);
+
+    // 执行查询
+    let client = get_mongodb_client();
+    let coll_arcades: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
+    let mut cursor = coll_arcades
+        .aggregate(pipeline)
+        .collation(collation)
+        .await?;
+
+    // 收集结果
+    let mut results = Vec::new();
+    while cursor.advance().await? {
+        let doc = cursor.deserialize_current()?;
+        let json_value: serde_json::Value = bson::to_bson(&doc)
+            .map_err(|e| AppError::Serialize(e.to_string()))?
+            .into();
+        results.push(json_value);
+    }
+    let total_count = results.len();
+    let paged_results = paginate_results(&results, query.page_index, query.page_size)?;
+
+    Ok((paged_results, total_count))
+}
+
+fn generate_geo_doc(query: &SearchQuery) -> Result<Option<Document>> {
     if let (Some(lat), Some(lng), Some(range)) = (query.lat, query.lng, query.range) {
-        pipeline.push(doc! {
+        Ok(Some(doc! {
             "$geoNear": {
                 "near" : {
                     "type" : "Point",
@@ -50,7 +96,7 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
                 "spherical" : true,
                 "maxDistance": range
             }
-        });
+        }))
     } else if query.lat.is_some() != query.lng.is_some()
         || query.lat.is_some() != query.range.is_some()
     {
@@ -58,21 +104,12 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
             "地理位置搜索需要同时提供lat、lng和range三个参数".to_string(),
         )
         .into());
+    } else {
+        Ok(None)
     }
+}
 
-    //名称搜索
-    if let Some(name) = query.name {
-        pipeline.push(doc! {"$match": {"arcade_name": {"$regex": name}}})
-    }
-
-    let collation = Collation::builder().locale("zh").build();
-    let sort_doc = match query.sort.as_deref() {
-        Some("Distance") => doc! {"$sort": {"distance": 1}},
-        Some("Pinyin") => doc! {"$sort": {"arcade_name": 1}},
-        _ => doc! {"$sort": {"arcade_id": 1}},
-    };
-    pipeline.push(sort_doc);
-
+fn serialize_data(pipeline: &mut Vec<Document>) {
     pipeline.push(doc! {
         "$project": {
             "_id": 0,
@@ -90,47 +127,4 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
             }}
         },
     });
-
-    info!("聚合管道：{:?}", pipeline);
-
-    // 执行查询
-    let client = get_mongodb_client();
-    let coll_arcades: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
-    let mut cursor = coll_arcades
-        .aggregate(pipeline)
-        .collation(collation)
-        .await?;
-
-    // 收集结果
-    let mut all_results = Vec::new();
-    while cursor.advance().await? {
-        let doc = cursor.deserialize_current()?;
-        let json_value: serde_json::Value = bson::to_bson(&doc)
-            .map_err(|e| AppError::Serialize(e.to_string()))?
-            .into();
-        all_results.push(json_value);
-    }
-    let total_count = all_results.len();
-    let paged_results =
-        if let (Some(page_index), Some(page_size)) = (query.page_index, query.page_size) {
-            if page_index < 1 || page_size < 1 {
-                return Err(AppError::Validation("页码和每页大小必须大于0".to_string()).into());
-            }
-            let start = ((page_index - 1) * page_size) as usize;
-            let end = std::cmp::min(start + page_size as usize, total_count);
-            if start < total_count {
-                all_results[start..end].to_vec()
-            } else {
-                Vec::new()
-            }
-        } else if query.page_index.is_some() != query.page_index.is_some() {
-            return Err(AppError::Validation(
-                "分页需要同时提供page_index、page_size两个参数".to_string(),
-            )
-            .into());
-        } else {
-            all_results
-        };
-
-    Ok((paged_results, total_count))
 }
