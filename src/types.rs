@@ -1,3 +1,4 @@
+use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{DateTime, Decimal128};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -40,6 +41,7 @@ pub struct Arcade {
     pub arcade_lng: Decimal128,
 
     pub arcade_pos: Option<Point>,
+
     /// 机厅名
     pub arcade_name: String,
     /// 创建时间
@@ -62,4 +64,35 @@ impl Arcade {
     }
 }
 
-pub enum SortMethod {}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    /// 评论ID
+    #[serde(rename = "_id")]
+    pub id: ObjectId,
+    /// 机厅 ID
+    pub arcade_id: i32,
+    /// 评论
+    pub comment: String,
+    /// 创建时间
+    pub created_at: DateTime,
+    /// 评分
+    pub rating: Decimal128,
+    /// 用户 ID
+    pub user_id: ObjectId,
+    /// 赞/踩数
+    pub vote: i32,
+}
+
+impl Comment {
+    pub fn to_response(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "arcade_id": self.arcade_id,
+            "user_id": self.user_id.to_string(),
+            "rating": self.rating.to_string().parse::<f64>().unwrap_or(0.0),
+            "comment": self.comment,
+            "vote": self.vote,
+            "created_at": self.created_at.try_to_rfc3339_string().unwrap_or_default(),
+        })
+    }
+}

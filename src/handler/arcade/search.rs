@@ -43,7 +43,7 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
         None => {}
         Some(document) => pipeline.push(document),
     }
-    
+
     //名称搜索
     if let Some(name) = &query.name {
         pipeline.push(doc! {"$match": {"arcade_name": {"$regex": name}}})
