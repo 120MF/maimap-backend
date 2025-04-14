@@ -16,7 +16,14 @@ async fn main() {
 
     let router = Router::with_path("arcades")
         .get(search_arcades_handler)
-        .push(Router::with_path("{arcade_id}").get(get_arcade_by_id_handler));
+        .push(
+            Router::with_path("{arcade_id}")
+                .push(
+                    Router::with_path("comments")
+                        .get(maimap_backend::handler::arcade::get_comments_handler),
+                )
+                .get(get_arcade_by_id_handler),
+        );
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
     Server::new(acceptor).serve(router).await;

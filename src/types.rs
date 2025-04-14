@@ -86,7 +86,7 @@ pub struct Comment {
 impl Comment {
     pub fn to_response(&self) -> serde_json::Value {
         serde_json::json!({
-            "id": self.id,
+            "id": self.id.to_string(),
             "arcade_id": self.arcade_id,
             "user_id": self.user_id.to_string(),
             "rating": self.rating.to_string().parse::<f64>().unwrap_or(0.0),
