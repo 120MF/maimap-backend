@@ -13,14 +13,20 @@ name = "scrape"
 path = "src/bin/scrape.rs"
 required-features = ["scrape"]
 
+[[test]]
+name = "server-arcade-api-test"
+path = "tests/arcade_api.rs"
+required-features = ["server"]
+
 [features]
 default = []
 server = ["salvo", "mongodb"]
 scrape = ["headless_chrome", "scraper", "mongodb", "reqwest"]
+test-all = ["server"]
 
 [dependencies]
-salvo = { version = "0.78", optional = true }
-tokio = { version = "1", features = ["macros"] }
+salvo = { version = "0.78", features = ["test"], optional = true }
+tokio = { version = "1", features = ["macros", "test-util"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 serde = { version = "1", features = ["derive"] }
@@ -36,6 +42,8 @@ ali-oss-rs = { version = "0.2" }
 
 thiserror = "2.0"
 anyhow = "1.0"
+
+
 
 [target.'cfg(unix)'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
