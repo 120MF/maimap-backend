@@ -39,7 +39,7 @@ struct GeoLocation {
 
 impl GeoLocation {
     fn to_point(&self) -> Point {
-        Point::new(self.lat, self.lng)
+        Point::new(self.lng, self.lat)
     }
 }
 impl Default for GeoLocation {

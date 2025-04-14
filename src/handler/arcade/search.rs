@@ -1,21 +1,22 @@
 use crate::db::get_mongodb_client;
 use crate::env::DB_NAME;
+use crate::errors::AppError;
 use crate::handler::common::handle_error;
 use crate::res::ApiResponse;
 use crate::types::Arcade;
 use anyhow::Result;
-use mongodb::bson::Decimal128;
+use mongodb::bson::Document;
 use mongodb::bson::doc;
+use mongodb::options::Collation;
 use mongodb::{Collection, bson};
 use salvo::prelude::*;
 use serde::Deserialize;
-use std::str::FromStr;
 use tracing::info;
 
 #[handler]
 pub async fn search_arcades_handler(req: &mut Request, res: &mut Response) {
     match search_arcade(req).await {
-        Ok(arcades) => res.render(Json(ApiResponse::success(arcades))),
+        Ok((arcades, count)) => res.render(Json(ApiResponse::success(arcades).with_count(count))),
         Err(e) => handle_error(res, e),
     }
 }
@@ -26,69 +27,110 @@ struct SearchQuery {
     lat: Option<f64>,
     lng: Option<f64>,
     range: Option<f64>, // 单位：米
+    page_index: Option<u32>,
+    page_size: Option<u32>,
     sort: Option<String>,
 }
 
-async fn search_arcade(req: &mut Request) -> Result<Vec<serde_json::Value>> {
+async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usize)> {
     // 从请求中提取查询参数
     let query: SearchQuery = req.parse_queries::<SearchQuery>()?;
 
     // 创建查询条件
-    let mut filter = doc! {};
+    let mut pipeline: Vec<Document> = Vec::new();
 
-    // 名称搜索
-    if let Some(name) = query.name {
-        info!(name);
-        filter.insert("arcade_name", doc! { "$regex" : name });
-    }
-
-    // 地理位置搜索
     if let (Some(lat), Some(lng), Some(range)) = (query.lat, query.lng, query.range) {
-        // 地球半径约为6371000米，将距离（米）转换为弧度
-        let radius_in_radians = range / 6371000.0;
-
-        filter.insert(
-            "arcade_pos",
-            doc! {
-                "$geoWithin": {
-                    "$centerSphere": [
-                        [lng, lat],  // 坐标点作为数组
-                        radius_in_radians  // 半径作为单独值
-                    ]
-                }
-            },
-        );
+        pipeline.push(doc! {
+            "$geoNear": {
+                "near" : {
+                    "type" : "Point",
+                    "coordinates" : [lng, lat]
+                },
+                "distanceField": "distance",
+                "spherical" : true,
+                "maxDistance": range
+            }
+        });
+    } else if query.lat.is_some() != query.lng.is_some()
+        || query.lat.is_some() != query.range.is_some()
+    {
+        return Err(AppError::Validation(
+            "地理位置搜索需要同时提供lat、lng和range三个参数".to_string(),
+        )
+        .into());
     }
 
-    info!("{}", filter.to_string());
+    //名称搜索
+    if let Some(name) = query.name {
+        pipeline.push(doc! {"$match": {"arcade_name": {"$regex": name}}})
+    }
 
-    // let mut sort_filter = doc! {};
+    let collation = Collation::builder().locale("zh").build();
+    let sort_doc = match query.sort.as_deref() {
+        Some("Distance") => doc! {"$sort": {"distance": 1}},
+        Some("Pinyin") => doc! {"$sort": {"arcade_name": 1}},
+        _ => doc! {"$sort": {"arcade_id": 1}},
+    };
+    pipeline.push(sort_doc);
 
-    // 如果有排序参数
-    // if let Some(sort_param) = query.sort {
-    //     if let Some((field, order)) = sort_param.split_once(':') {
-    //         let sort_order = if order == "desc" { -1 } else { 1 };
-    //     }
-    // }
+    pipeline.push(doc! {
+        "$project": {
+            "_id": 0,
+            "arcade_pos": 0
+        },
+    });
+
+    pipeline.push(doc! {
+        "$addFields": {
+            "arcade_lat": { "$toDouble": "$arcade_lat" },
+            "arcade_lng": { "$toDouble": "$arcade_lng" },
+            "created_at": { "$dateToString": {
+                "format": "%Y-%m-%dT%H:%M:%S.%LZ",
+                "date": "$created_at"
+            }}
+        },
+    });
+
+    info!("聚合管道：{:?}", pipeline);
 
     // 执行查询
     let client = get_mongodb_client();
     let coll_arcades: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
-
-    let mut find_operation = coll_arcades.find(filter);
-    // 应用排序选项
-    // if let Some(sort) = options.sort {
-    //     find_operation = find_operation.sort(sort);
-    // }
-
-    let mut cursor = find_operation.await?;
+    let mut cursor = coll_arcades
+        .aggregate(pipeline)
+        .collation(collation)
+        .await?;
 
     // 收集结果
-    let mut results = Vec::new();
+    let mut all_results = Vec::new();
     while cursor.advance().await? {
-        let arcade = cursor.deserialize_current()?;
-        results.push(arcade.to_response());
+        let doc = cursor.deserialize_current()?;
+        let json_value: serde_json::Value = bson::to_bson(&doc)
+            .map_err(|e| AppError::Serialize(e.to_string()))?
+            .into();
+        all_results.push(json_value);
     }
+    let total_count = all_results.len();
+    let paged_results =
+        if let (Some(page_index), Some(page_size)) = (query.page_index, query.page_size) {
+            if page_index < 1 || page_size < 1 {
+                return Err(AppError::Validation("页码和每页大小必须大于0".to_string()).into());
+            }
+            let start = ((page_index - 1) * page_size) as usize;
+            let end = std::cmp::min(start + page_size as usize, total_count);
+            if start < total_count {
+                all_results[start..end].to_vec()
+            } else {
+                Vec::new()
+            }
+        } else if query.page_index.is_some() != query.page_index.is_some() {
+            return Err(AppError::Validation(
+                "分页需要同时提供page_index、page_size两个参数".to_string(),
+            )
+            .into());
+        } else {
+            all_results
+        };
 
-    Ok(results)
+    Ok((paged_results, total_count))
 }

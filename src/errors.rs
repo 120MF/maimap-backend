@@ -23,6 +23,9 @@ pub enum AppError {
     #[error("参数验证错误：{0}")]
     Validation(String),
 
+    #[error("序列化错误：{0}")]
+    Serialize(String),
+
     #[error("配置错误：{0}")]
     Configuration(String),
 

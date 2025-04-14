@@ -7,8 +7,8 @@ use salvo::prelude::*;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
     check_required_env_vars();
+    tracing_subscriber::fmt().init();
     let client = Client::with_uri_str(database_uri())
         .await
         .expect("failed to connect");
