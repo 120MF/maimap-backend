@@ -5,12 +5,11 @@ mod types;
 mod tests {
     use crate::env::{check_required_env_vars, database_uri};
     use crate::types::{ApiResponse, Arcade};
-    use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id};
+    use maimap_backend::db::MONGODB_CLIENT;
     use maimap_backend::router::router;
     use mongodb::Client;
     use salvo::prelude::*;
     use salvo::test::{ResponseExt, TestClient};
-    use tracing::info;
 
     #[tokio::test]
 
