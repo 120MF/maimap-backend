@@ -41,13 +41,14 @@ WORKDIR /app
 
 ARG GITHUB_TOKEN
 ARG ENV_FILE_URL
+ARG CACHEBUST=1
 
 RUN if [ -z "$GITHUB_TOKEN" ] || [ -z "$ENV_FILE_URL" ]; then \
     echo "Error: GITHUB_TOKEN and ENV_FILE_URL must be provided"; \
     exit 1; \
     fi && \
     curl -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3.raw" -H "Cache-Control: no-cache" \
-    -o /app/.env -L "${ENV_FILE_URL}"
+    -o /app/.env -L "${ENV_FILE_URL}?cachebust=${CACHEBUST}"
 
 # 从构建阶段复制二进制文件
 COPY --from=build /app/target/release/server /app/app

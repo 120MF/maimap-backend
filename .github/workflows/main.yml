@@ -3,6 +3,8 @@ name: maimap-backend-docker-ci
 on:
   push:
 
+  workflow_dispatch:
+
 jobs:
   CargoTest:
     runs-on: ubuntu-latest
@@ -44,3 +46,4 @@ jobs:
           build-args: |
             ENV_FILE_URL=https://raw.githubusercontent.com/120MF/maimap-env/main/.env
             GITHUB_TOKEN=${{ secrets.GH_TOKEN }}
+            CACHEBUST=${{ github.run_id }}-${{ github.run_number }}
