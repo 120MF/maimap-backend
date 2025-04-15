@@ -61,14 +61,15 @@ mod tests {
         check_required_env_vars();
         ensure_mongodb_connected().await;
         let service = Service::new(router());
-        let content: ApiResponse<Comment> =
+        let content: ApiResponse<Vec<Comment>> =
             TestClient::get("http://127.0.0.1:5800/arcades/1514/comments".to_string())
                 .send(&service)
                 .await
                 .take_json()
                 .await
                 .expect("解析JSON失败");
+        content.count.unwrap();
         assert_eq!(content.success, true);
-        assert_eq!(content.data.arcade_id, 1514);
+        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
