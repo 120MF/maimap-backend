@@ -4,8 +4,27 @@ on:
   push:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up env
+        run: |
+          echo "TEST_DATABASE_URI=${{ secrets.TEST_DATABASE_URI }}" > .env
+
+      - name: Run test
+        run: cargo test --features test-all
+
   docker:
     runs-on: ubuntu-latest
+    needs: test
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
