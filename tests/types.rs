@@ -27,3 +27,22 @@ pub struct Arcade {
     /// 创建时间
     pub created_at: String,
 }
+
+/// 评论
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    /// 机厅 ID
+    pub arcade_id: i64,
+    /// 评论
+    pub comment: String,
+    /// 创建时间
+    pub created_at: String,
+    /// 评论ID
+    pub id: String,
+    /// 评分
+    pub rating: f64,
+    /// 用户 ID
+    pub user_id: String,
+    /// 赞/踩数
+    pub vote: i64,
+}

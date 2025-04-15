@@ -4,7 +4,7 @@ mod types;
 #[cfg(test)]
 mod tests {
     use crate::env::{check_required_env_vars, database_uri};
-    use crate::types::{ApiResponse, Arcade};
+    use crate::types::{ApiResponse, Arcade, Comment};
     use maimap_backend::db::MONGODB_CLIENT;
     use maimap_backend::router::router;
     use mongodb::Client;
@@ -54,5 +54,21 @@ mod tests {
                 .expect("解析JSON失败");
         content.count.unwrap();
         tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
+
+    #[tokio::test]
+    async fn test_get_comments() {
+        check_required_env_vars();
+        ensure_mongodb_connected().await;
+        let service = Service::new(router());
+        let content: ApiResponse<Comment> =
+            TestClient::get("http://127.0.0.1:5800/arcades/1514/comments".to_string())
+                .send(&service)
+                .await
+                .take_json()
+                .await
+                .expect("解析JSON失败");
+        assert_eq!(content.success, true);
+        assert_eq!(content.data.arcade_id, 1514);
     }
 }
