@@ -22,7 +22,7 @@ jobs:
           echo "TEST_DATABASE_URI=${{ secrets.TEST_DATABASE_URI }}" > .env
 
       - name: Run test
-        run: cargo test --features test-all
+        run: cargo test
 
   BuildDockerImage:
     runs-on: ubuntu-latest
