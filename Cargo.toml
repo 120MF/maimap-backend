@@ -1,49 +1,26 @@
-[package]
-name = "maimap-backend"
+[workspace]
+members = [
+    "crates/*"
+]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
+authors = ["MoonFeather <moonfeather120@outlook.com>"]
 edition = "2024"
+description = """
+MaiMap's backend program.
+"""
+repository = "https://github.com/120MF/maimap-backend"
+readme = "./README.md"
+license = "MIT"
 
-[[bin]]
-name = "server"
-path = "src/bin/server.rs"
-required-features = ["server"]
+[workspace.dependencies]
+maimap-derive = { path = "crates/maimap-derive" }
+maimap-server = { path = "crates/maimap-server" }
+maimap-scrape = { path = "crates/maimap-scrape" }
+maimap-utils = { path = "crates/maimap-utils" }
 
-[[bin]]
-name = "scrape"
-path = "src/bin/scrape.rs"
-required-features = ["scrape"]
-
-[[test]]
-name = "server-arcade-api-test"
-path = "tests/arcade_api.rs"
-required-features = ["server"]
-
-[features]
-default = []
-server = ["salvo", "mongodb"]
-scrape = ["headless_chrome", "scraper", "mongodb", "reqwest"]
-test-all = ["server"]
-
-[dependencies]
-salvo = { version = "0.78", features = ["test"], optional = true }
-tokio = { version = "1", features = ["macros", "test-util"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-mongodb = { version = "3", optional = true }
-dotenv = "0.15.0"
-
-headless_chrome = { version = "1.0", optional = true }
-scraper = { version = "0.23", optional = true }
-reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
-
-ali-oss-rs = { version = "0.2" }
-
-thiserror = "2.0"
-anyhow = "1.0"
-
-
-
-[target.'cfg(unix)'.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "deny"

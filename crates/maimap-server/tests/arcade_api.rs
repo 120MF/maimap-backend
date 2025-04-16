@@ -4,24 +4,13 @@ mod types;
 #[cfg(test)]
 mod tests {
     use crate::env::{check_required_env_vars, database_uri};
+    use crate::router::router;
     use crate::types::{ApiResponse, Arcade, Comment};
-    use maimap_backend::db::MONGODB_CLIENT;
-    use maimap_backend::router::router;
+    use maimap_utils::db::ensure_mongodb_connected;
     use mongodb::Client;
     use salvo::prelude::*;
     use salvo::test::{ResponseExt, TestClient};
     use std::time::Duration;
-
-    async fn ensure_mongodb_connected() {
-        if MONGODB_CLIENT.get().is_none() {
-            let client = Client::with_uri_str(database_uri())
-                .await
-                .expect("failed to connect");
-
-            // 忽略可能的错误
-            let _ = MONGODB_CLIENT.set(client);
-        }
-    }
 
     #[tokio::test]
     async fn test_get_arcade_by_id() {

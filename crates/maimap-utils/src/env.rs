@@ -1,12 +1,41 @@
-use dotenv::dotenv;
+use dotenvy::from_path;
 use std::env;
+use std::path::PathBuf;
 use tracing::warn;
 
+fn find_env_file() -> Option<PathBuf> {
+    // 尝试从当前目录及其父目录查找.env文件
+    let mut current_dir = env::current_dir().ok()?;
+
+    loop {
+        let env_path = current_dir.join(".env");
+        if env_path.exists() {
+            return Some(env_path);
+        }
+
+        // 移动到上一级目录
+        if !current_dir.pop() {
+            break;
+        }
+    }
+
+    None
+}
 pub fn check_required_env_vars() {
-    dotenv().ok();
+    // 查找并加载项目根目录的.env文件
+    if let Some(env_path) = find_env_file() {
+        match from_path(&env_path) {
+            Ok(_) => tracing::info!("已加载环境变量文件: {:?}", env_path),
+            Err(e) => warn!("无法加载环境变量文件 {:?}: {:?}", env_path, e),
+        }
+    } else {
+        warn!("未找到.env文件");
+    }
+
     let required_vars = [
         "QMAP_KEY",
         "DATABASE_URI",
+        "TEST_DATABASE_URI",
         "BACKUP_PATH",
         "ALI_ACCESS_KEY_ID",
         "ALI_ACCESS_KEY_SECRET",

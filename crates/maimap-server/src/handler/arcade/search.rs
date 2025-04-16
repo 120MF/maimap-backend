@@ -1,14 +1,10 @@
-use crate::db::get_mongodb_client;
-use crate::env::DB_NAME;
-use crate::errors::AppError;
 use crate::handler::common::{handle_error, paginate_results};
 use crate::res::ApiResponse;
-use crate::types::Arcade;
-use anyhow::Result;
-use mongodb::bson::Document;
-use mongodb::bson::doc;
-use mongodb::options::Collation;
-use mongodb::{Collection, bson};
+use maimap_utils::db::{Collation, Collection, Document, doc, get_mongodb_client, to_bson};
+use maimap_utils::env::DB_NAME;
+use maimap_utils::errors::AppError;
+use maimap_utils::errors::Result;
+use maimap_utils::types::Arcade;
 use salvo::prelude::*;
 use serde::Deserialize;
 
@@ -73,7 +69,7 @@ async fn search_arcade(req: &mut Request) -> Result<(Vec<serde_json::Value>, usi
     let mut results = Vec::new();
     while cursor.advance().await? {
         let doc = cursor.deserialize_current()?;
-        let json_value: serde_json::Value = bson::to_bson(&doc)
+        let json_value: serde_json::Value = to_bson(&doc)
             .map_err(|e| AppError::Serialize(e.to_string()))?
             .into();
         results.push(json_value);

@@ -2,7 +2,6 @@ use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{DateTime, Decimal128};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Point {
     pub r#type: String,

@@ -1,6 +1,5 @@
-use crate::errors::AppError;
 use crate::res::ApiResponse;
-use anyhow::{Error, Result};
+use maimap_utils::errors::{AppError, Error, Result};
 use salvo::prelude::*;
 pub fn handle_error(res: &mut Response, err: Error) {
     if let Some(app_err) = err.downcast_ref::<AppError>() {

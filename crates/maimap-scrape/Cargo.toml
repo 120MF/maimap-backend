@@ -1,0 +1,17 @@
+[package]
+name = "maimap-scrape"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
+license.workspace = true
+
+[dependencies]
+headless_chrome = { version = "1.0" }
+scraper = { version = "0.23" }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+[lints]
+workspace = true

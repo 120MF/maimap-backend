@@ -1,12 +1,12 @@
-use crate::db::get_mongodb_client;
-use crate::env::DB_NAME;
-use crate::errors::AppError;
 use crate::res::ApiResponse;
-use crate::types::Arcade;
-use anyhow::Result;
-use mongodb::Collection;
-use mongodb::bson::Bson::Int32;
-use mongodb::bson::doc;
+use maimap_utils::db::Collection;
+use maimap_utils::db::Int32;
+use maimap_utils::db::doc;
+use maimap_utils::db::get_mongodb_client;
+use maimap_utils::env::DB_NAME;
+use maimap_utils::errors::AppError;
+use maimap_utils::errors::Result;
+use maimap_utils::types::Arcade;
 use salvo::prelude::*;
 
 use crate::handler::common::handle_error;
