@@ -1,7 +1,7 @@
 name: maimap-backend-docker-ci
 
 on:
-  #  push:
+  push:
 
   workflow_dispatch:
 
