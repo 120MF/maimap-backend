@@ -5,8 +5,8 @@ use salvo::prelude::*;
 
 #[tokio::main]
 async fn main() {
-    ensure_mongodb_connected().await;
     check_required_env_vars();
+    ensure_mongodb_connected().await;
     tracing_subscriber::fmt().init();
 
     let router = router();
