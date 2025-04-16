@@ -1,13 +1,37 @@
-use crate::env::DB_NAME;
+use crate::env::{DB_NAME, database_uri, test_database_uri};
 
 use anyhow::Result;
 
 use crate::types::Arcade;
-use mongodb::bson::doc;
-use mongodb::{Client, Collection};
+pub use mongodb::bson::Bson::Int32;
+pub use mongodb::bson::DateTime;
+pub use mongodb::bson::Decimal128;
+pub use mongodb::bson::Document;
+pub use mongodb::bson::doc;
+pub use mongodb::bson::to_bson;
+pub use mongodb::options::Collation;
+pub use mongodb::{Client, Collection};
 use std::sync::OnceLock;
 
 pub static MONGODB_CLIENT: OnceLock<Client> = OnceLock::new();
+
+pub async fn ensure_mongodb_connected() {
+    if MONGODB_CLIENT.get().is_none() {
+        let client = Client::with_uri_str(database_uri())
+            .await
+            .expect("无法连接到数据库");
+        let _ = MONGODB_CLIENT.set(client);
+    }
+}
+
+pub async fn ensure_test_mongodb_connected() {
+    if MONGODB_CLIENT.get().is_none() {
+        let client = Client::with_uri_str(test_database_uri())
+            .await
+            .expect("无法连接到测试数据库");
+        let _ = MONGODB_CLIENT.set(client);
+    }
+}
 
 #[inline]
 pub fn get_mongodb_client() -> &'static Client {
@@ -17,7 +41,6 @@ pub fn get_mongodb_client() -> &'static Client {
 pub async fn get_max_arcade_id() -> Result<i32> {
     let client = get_mongodb_client();
     let collection: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
-
     let options = mongodb::options::FindOneOptions::builder()
         .sort(doc! {"arcade_id": -1})
         .build();

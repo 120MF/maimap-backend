@@ -7,16 +7,27 @@ RUN apk add --no-cache musl-dev pkgconfig openssl-dev perl make
 
 # 分层缓存构建依赖
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src/bin && \
-    echo "fn main() {}" > src/bin/server.rs && \
-    echo "fn main() {}" > src/bin/scrape.rs && \
-    echo "pub fn dummy() {}" > src/lib.rs && \
-    cargo build --release --features server,scrape
+RUN mkdir -p crates/maimap-server/src crates/maimap-scrape/src crates/maimap-utils/src crates/maimap-derive/src
+COPY crates/maimap-server/Cargo.toml ./crates/maimap-server/
+COPY crates/maimap-scrape/Cargo.toml ./crates/maimap-scrape/
+COPY crates/maimap-derive/Cargo.toml ./crates/maimap-derive/
+COPY crates/maimap-utils/Cargo.toml ./crates/maimap-utils/
+
+RUN echo "fn main() {}" > crates/maimap-server/src/main.rs && \
+    echo "fn main() {}" > crates/maimap-scrape/src/main.rs && \
+    echo "pub fn dummy() {}" > crates/maimap-utils/src/lib.rs && \
+    echo 'extern crate proc_macro;' > crates/maimap-derive/src/lib.rs && \
+    echo 'use proc_macro::TokenStream;' >> crates/maimap-derive/src/lib.rs && \
+    echo '' >> crates/maimap-derive/src/lib.rs && \
+    echo '#[proc_macro_derive(Dummy)]' >> crates/maimap-derive/src/lib.rs && \
+    echo 'pub fn dummy_derive(_input: TokenStream) -> TokenStream {' >> crates/maimap-derive/src/lib.rs && \
+    echo '    TokenStream::new()' >> crates/maimap-derive/src/lib.rs && \
+    echo '}' >> crates/maimap-derive/src/lib.rs
 
 # 复制实际源代码并重新构建
-COPY src ./src/
-RUN touch src/bin/server.rs src/bin/scrape.rs src/lib.rs && \
-    cargo build --release --features server,scrape
+COPY crates ./crates/
+RUN touch crates/maimap-server/src/main.rs crates/maimap-scrape/src/main.rs crates/maimap-utils/src/lib.rs crates/maimap-derive/src/lib.rs && \
+    cargo build --release
 
 # 运行阶段
 FROM alpine:3.21
@@ -51,18 +62,18 @@ RUN if [ -z "$GITHUB_TOKEN" ] || [ -z "$ENV_FILE_URL" ]; then \
     -o /app/.env -L "${ENV_FILE_URL}?cachebust=${CACHEBUST}"
 
 # 从构建阶段复制二进制文件
-COPY --from=build /app/target/release/server /app/app
-COPY --from=build /app/target/release/scrape /app/scraper
-RUN chmod +x /app/app /app/scraper
+COPY --from=build /app/target/release/maimap-server /app/maimap-server
+COPY --from=build /app/target/release/maimap-scrape /app/maimap-scrape
+RUN chmod +x /app/maimap-server /app/maimap-scrape
 
 RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
     echo 'echo "Starting cron service..."' >> /app/entrypoint.sh && \
     echo 'crond -f &' >> /app/entrypoint.sh && \
     echo 'echo "Cron service started"' >> /app/entrypoint.sh && \
     echo 'echo "Running initial scrape..."' >> /app/entrypoint.sh && \
-    echo '/app/scraper' >> /app/entrypoint.sh && \
+    echo '/app/maimap-scrape' >> /app/entrypoint.sh && \
     echo 'echo "Starting main application..."' >> /app/entrypoint.sh && \
-    echo 'exec /app/app' >> /app/entrypoint.sh && \
+    echo 'exec /app/maimap-server' >> /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
 
 CMD ["/app/entrypoint.sh"]

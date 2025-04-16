@@ -1,16 +1,12 @@
 use headless_chrome::{Browser, LaunchOptions, Tab};
 
-use maimap_backend::backup::backup_database;
-use maimap_backend::db::{MONGODB_CLIENT, get_max_arcade_id, insert_many_arcades};
-use maimap_backend::env::{check_required_env_vars, database_uri, qmap_key};
-
-use anyhow::{Context, Result};
-use maimap_backend::errors::AppError;
-
-use maimap_backend::types::{Arcade, Point};
-
-use mongodb::Client;
-use mongodb::bson::{DateTime, Decimal128};
+use maimap_utils::backup::backup_database;
+use maimap_utils::db::{
+    DateTime, Decimal128, ensure_mongodb_connected, get_max_arcade_id, insert_many_arcades,
+};
+use maimap_utils::env::{check_required_env_vars, qmap_key};
+use maimap_utils::errors::{AppError, Context, Result};
+use maimap_utils::types::{Arcade, Point};
 
 use scraper::{Html, Selector};
 use serde::Deserialize;
@@ -59,11 +55,7 @@ async fn main() {
 
     info!("执行定时爬取华立机厅任务");
     check_required_env_vars();
-
-    let client = Client::with_uri_str(database_uri())
-        .await
-        .expect("failed to connect");
-    MONGODB_CLIENT.set(client).unwrap();
+    ensure_mongodb_connected().await;
 
     match scrape_arcades().await {
         Ok(_) => {
