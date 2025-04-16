@@ -628,12 +628,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dotenv"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
-
-[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1613,7 +1607,6 @@ dependencies = [
 name = "maimap-derive"
 version = "0.1.0"
 dependencies = [
- "proc-macro2",
  "quote",
  "syn 2.0.100",
 ]
@@ -1623,15 +1616,19 @@ name = "maimap-scrape"
 version = "0.1.0"
 dependencies = [
  "headless_chrome",
+ "maimap-utils",
  "reqwest",
  "scraper",
+ "serde",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
 name = "maimap-server"
 version = "0.1.0"
 dependencies = [
- "dotenv",
  "maimap-utils",
  "openssl",
  "salvo",
@@ -1649,6 +1646,7 @@ dependencies = [
  "ali-oss-rs",
  "anyhow",
  "dotenvy",
+ "maimap-derive",
  "mongodb",
  "serde",
  "serde_json",

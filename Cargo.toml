@@ -21,6 +21,10 @@ maimap-server = { path = "crates/maimap-server" }
 maimap-scrape = { path = "crates/maimap-scrape" }
 maimap-utils = { path = "crates/maimap-utils" }
 
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tokio = { version = "1.44", features = ["macros", "test-util"] }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unreachable_pub = "deny"

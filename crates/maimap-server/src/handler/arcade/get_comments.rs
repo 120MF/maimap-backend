@@ -6,6 +6,7 @@ use maimap_utils::db::get_mongodb_client;
 use maimap_utils::env::DB_NAME;
 use maimap_utils::errors::AppError;
 use maimap_utils::errors::Result;
+use maimap_utils::traits::ToResponse;
 use maimap_utils::types::Comment;
 use salvo::prelude::Json;
 use salvo::{Request, Response, handler};

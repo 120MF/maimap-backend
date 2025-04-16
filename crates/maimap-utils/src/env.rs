@@ -55,6 +55,10 @@ pub fn database_uri() -> String {
     env::var("DATABASE_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string())
 }
 
+pub fn test_database_uri() -> String {
+    env::var("TEST_DATABASE_URI").unwrap().to_string()
+}
+
 pub fn backup_path() -> String {
     env::var("BACKUP_PATH").unwrap_or_else(|_| "".to_string())
 }

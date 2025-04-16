@@ -1,13 +1,11 @@
-mod env;
 mod types;
 
 #[cfg(test)]
 mod tests {
-    use crate::env::{check_required_env_vars, database_uri};
-    use crate::router::router;
     use crate::types::{ApiResponse, Arcade, Comment};
-    use maimap_utils::db::ensure_mongodb_connected;
-    use mongodb::Client;
+    use maimap_server::router::router;
+    use maimap_utils::db::ensure_test_mongodb_connected;
+    use maimap_utils::env::check_required_env_vars;
     use salvo::prelude::*;
     use salvo::test::{ResponseExt, TestClient};
     use std::time::Duration;
@@ -15,7 +13,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_arcade_by_id() {
         check_required_env_vars();
-        ensure_mongodb_connected().await;
+        ensure_test_mongodb_connected().await;
         let service = Service::new(router());
         let content: ApiResponse<Arcade> =
             TestClient::get("http://127.0.0.1:5800/arcades/1514".to_string())
@@ -32,7 +30,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_arcade() {
         check_required_env_vars();
-        ensure_mongodb_connected().await;
+        ensure_test_mongodb_connected().await;
         let service = Service::new(router());
         let content: ApiResponse<Vec<Arcade>> =
             TestClient::get("http://127.0.0.1:5800/arcades?name=环游嘉年华&lat=39.909333&lng=116.397183&range=1000000&sort=Distance&page_index=1&page_size=20".to_string())
@@ -48,7 +46,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_comments() {
         check_required_env_vars();
-        ensure_mongodb_connected().await;
+        ensure_test_mongodb_connected().await;
         let service = Service::new(router());
         let content: ApiResponse<Vec<Comment>> =
             TestClient::get("http://127.0.0.1:5800/arcades/1514/comments".to_string())

@@ -9,11 +9,12 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
+maimap-derive = { workspace = true }
 serde = "1.0"
 serde_json = "1.0"
 dotenvy = "0.15"
 mongodb = "3.2"
-tracing = "0.1.41"
+tracing = { workspace = true }
 ali-oss-rs = { version = "0.2" }
 thiserror = "2.0"
 anyhow = "1.0"

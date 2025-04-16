@@ -1,9 +1,11 @@
-use crate::env::{DB_NAME, database_uri};
+use crate::env::{DB_NAME, database_uri, test_database_uri};
 
 use anyhow::Result;
 
 use crate::types::Arcade;
 pub use mongodb::bson::Bson::Int32;
+pub use mongodb::bson::DateTime;
+pub use mongodb::bson::Decimal128;
 pub use mongodb::bson::Document;
 pub use mongodb::bson::doc;
 pub use mongodb::bson::to_bson;
@@ -17,9 +19,16 @@ pub async fn ensure_mongodb_connected() {
     if MONGODB_CLIENT.get().is_none() {
         let client = Client::with_uri_str(database_uri())
             .await
-            .expect("failed to connect");
+            .expect("无法连接到数据库");
+        let _ = MONGODB_CLIENT.set(client);
+    }
+}
 
-        // 忽略可能的错误
+pub async fn ensure_test_mongodb_connected() {
+    if MONGODB_CLIENT.get().is_none() {
+        let client = Client::with_uri_str(test_database_uri())
+            .await
+            .expect("无法连接到测试数据库");
         let _ = MONGODB_CLIENT.set(client);
     }
 }
