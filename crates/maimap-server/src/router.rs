@@ -9,6 +9,7 @@ pub fn router() -> Router {
                 .get(get_arcade_by_id_handler)
                 .push(
                     Router::with_path("comments").get(crate::handler::arcade::get_comments_handler),
-                ),
+                )
+                .push(Router::with_path("tags").get(crate::handler::arcade::get_tags_handler)),
         )
 }

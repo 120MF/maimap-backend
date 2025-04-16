@@ -69,3 +69,21 @@ pub struct Comment {
     /// 赞/踩数
     pub vote: i32,
 }
+
+/// 标签
+#[derive(Serialize, Deserialize, ToResponse)]
+pub struct Tag {
+    /// 机厅 ID
+    pub arcade_id: i32,
+    /// 创建时间
+    pub created_at: DateTime,
+    /// 唯一 ID
+    #[serde(rename = "_id")]
+    pub id: ObjectId,
+    /// 标签名
+    pub name: String,
+    /// 用户 ID
+    pub user_id: ObjectId,
+    /// 赞踩数
+    pub vote: i32,
+}

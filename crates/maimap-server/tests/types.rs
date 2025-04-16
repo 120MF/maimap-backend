@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, serde::Deserialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
-    pub data: T,
+    pub data: Option<T>,
     pub count: Option<usize>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,5 +44,22 @@ pub struct Comment {
     /// 用户 ID
     pub user_id: String,
     /// 赞/踩数
+    pub vote: i64,
+}
+
+/// 标签
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tag {
+    /// 机厅 ID
+    pub arcade_id: i64,
+    /// 创建时间
+    pub created_at: String,
+    /// 唯一 ID
+    pub id: String,
+    /// 标签名
+    pub name: String,
+    /// 用户 ID
+    pub user_id: String,
+    /// 赞踩数
     pub vote: i64,
 }

@@ -2,7 +2,7 @@ mod types;
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{ApiResponse, Arcade, Comment};
+    use crate::types::{ApiResponse, Arcade, Comment, Tag};
     use maimap_server::router::router;
     use maimap_utils::db::ensure_test_mongodb_connected;
     use maimap_utils::env::check_required_env_vars;
@@ -23,7 +23,7 @@ mod tests {
                 .await
                 .expect("解析JSON失败");
         assert_eq!(content.success, true);
-        assert_eq!(content.data.arcade_id, 1514);
+        assert_eq!(content.data.unwrap().arcade_id, 1514);
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     }
 
@@ -50,6 +50,23 @@ mod tests {
         let service = Service::new(router());
         let content: ApiResponse<Vec<Comment>> =
             TestClient::get("http://127.0.0.1:5800/arcades/1514/comments".to_string())
+                .send(&service)
+                .await
+                .take_json()
+                .await
+                .expect("解析JSON失败");
+        content.count.unwrap();
+        assert_eq!(content.success, true);
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
+
+    #[tokio::test]
+    async fn test_get_tags() {
+        check_required_env_vars();
+        ensure_test_mongodb_connected().await;
+        let service = Service::new(router());
+        let content: ApiResponse<Vec<Tag>> =
+            TestClient::get("http://127.0.0.1:5800/arcades/1155/tags".to_string())
                 .send(&service)
                 .await
                 .take_json()
