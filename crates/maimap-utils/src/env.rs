@@ -34,6 +34,7 @@ pub fn check_required_env_vars() {
 
     let required_vars = [
         "QMAP_KEY",
+        "FRONTEND_URL",
         "DATABASE_URI",
         "TEST_DATABASE_URI",
         "BACKUP_PATH",
@@ -49,6 +50,9 @@ pub fn check_required_env_vars() {
             warn!("缺少环境变量：{}", var);
         }
     }
+}
+pub fn frontend_uri() -> String {
+    env::var("FRONTEND_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string())
 }
 
 pub fn database_uri() -> String {
