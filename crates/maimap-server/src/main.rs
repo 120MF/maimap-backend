@@ -1,8 +1,7 @@
 use maimap_server::router::router;
 use maimap_utils::db::ensure_mongodb_connected;
 use maimap_utils::env::check_required_env_vars;
-use salvo::cors::Cors;
-use salvo::http::Method;
+use salvo::cors::{Any, Cors};
 use salvo::prelude::*;
 
 #[tokio::main]
@@ -13,14 +12,9 @@ async fn main() {
 
     let router = router();
     let cors = Cors::new()
-        .allow_origin("*")
-        .allow_methods(vec![
-            Method::GET,
-            Method::POST,
-            Method::DELETE,
-            Method::OPTIONS,
-        ])
-        .allow_headers("*")
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any)
         .into_handler();
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
