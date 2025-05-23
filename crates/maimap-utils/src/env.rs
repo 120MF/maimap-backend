@@ -52,7 +52,7 @@ pub fn check_required_env_vars() {
     }
 }
 pub fn frontend_uri() -> String {
-    env::var("FRONTEND_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string())
+    env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:8080".to_string())
 }
 
 pub fn database_uri() -> String {
