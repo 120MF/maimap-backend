@@ -1,6 +1,6 @@
 use maimap_server::router::router;
 use maimap_utils::db::ensure_mongodb_connected;
-use maimap_utils::env::{check_required_env_vars, frontend_uri};
+use maimap_utils::env::check_required_env_vars;
 use salvo::cors::Cors;
 use salvo::http::Method;
 use salvo::prelude::*;
@@ -13,7 +13,7 @@ async fn main() {
 
     let router = router();
     let cors = Cors::new()
-        .allow_origin(&frontend_uri())
+        .allow_origin("*")
         .allow_methods(vec![Method::GET, Method::POST, Method::DELETE])
         .allow_headers("authorization")
         .into_handler();
