@@ -14,8 +14,13 @@ async fn main() {
     let router = router();
     let cors = Cors::new()
         .allow_origin("*")
-        .allow_methods(vec![Method::GET, Method::POST, Method::DELETE])
-        .allow_headers("authorization")
+        .allow_methods(vec![
+            Method::GET,
+            Method::POST,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers("*")
         .into_handler();
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
