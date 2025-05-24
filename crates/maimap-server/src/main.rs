@@ -1,7 +1,7 @@
 use maimap_server::router::router;
 use maimap_utils::db::ensure_mongodb_connected;
 use maimap_utils::env::check_required_env_vars;
-use salvo::cors::Cors;
+use salvo::cors::{Cors, AllowHeaders};
 use salvo::http::Method;
 use salvo::prelude::*;
 
@@ -20,7 +20,7 @@ async fn main() {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers("*")
+        .allow_headers(AllowHeaders::any())
         .into_handler();
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
