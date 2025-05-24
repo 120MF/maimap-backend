@@ -3,7 +3,11 @@ FROM rust:1.86-alpine3.21 AS build
 WORKDIR /app
 
 # 安装构建依赖
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev perl make
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev perl make git && \
+    cargo install sccache && \
+    echo 'export RUSTC_WRAPPER=sccache' >> $HOME/.profile && \
+    echo 'export SCCACHE_CACHE_SIZE=5G' >> $HOME/.profile && \
+    source $HOME/.profile
 
 # 分层缓存构建依赖
 COPY Cargo.toml Cargo.lock ./
