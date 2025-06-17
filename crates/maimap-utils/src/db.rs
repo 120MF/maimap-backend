@@ -2,8 +2,9 @@ use crate::env::{DB_NAME, database_uri, test_database_uri};
 
 use anyhow::Result;
 
-use crate::types::Arcade;
+pub use crate::types::Arcade;
 pub use mongodb::bson::Bson::Int32;
+pub use mongodb::bson::Bson::ObjectId;
 pub use mongodb::bson::DateTime;
 pub use mongodb::bson::Decimal128;
 pub use mongodb::bson::Document;

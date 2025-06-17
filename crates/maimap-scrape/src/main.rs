@@ -1,3 +1,5 @@
+mod cleanup;
+
 use headless_chrome::{Browser, LaunchOptions, Tab};
 
 use maimap_utils::backup::backup_database;
@@ -8,6 +10,7 @@ use maimap_utils::env::{check_required_env_vars, qmap_key};
 use maimap_utils::errors::{AppError, Context, Result};
 use maimap_utils::types::{Arcade, Point};
 
+use crate::cleanup::remove_duplicate_arcades;
 use scraper::{Html, Selector};
 use serde::Deserialize;
 use std::fmt::{Display, Formatter};
@@ -60,12 +63,20 @@ async fn main() {
     match scrape_arcades().await {
         Ok(_) => {
             info!("爬取任务成功！");
+        }
+        Err(e) => error!("爬取任务失败！{}", e),
+    }
+    match remove_duplicate_arcades().await {
+        Ok(_) => {
+            info!("清理数据库完成！");
             match backup_database().await {
                 Ok(_) => info!("备份数据库成功！"),
                 Err(e) => error!("备份数据库失败！{}", e),
             }
         }
-        Err(e) => error!("爬取任务失败！{}", e),
+        Err(e) => {
+            error!("清理数据库失败！{}", e)
+        }
     }
 }
 

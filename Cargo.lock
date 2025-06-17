@@ -1615,6 +1615,7 @@ dependencies = [
 name = "maimap-scrape"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "headless_chrome",
  "maimap-utils",
  "reqwest",
