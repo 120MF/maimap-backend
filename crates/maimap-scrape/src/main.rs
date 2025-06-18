@@ -64,19 +64,23 @@ async fn main() {
         Ok(_) => {
             info!("爬取任务成功！");
         }
-        Err(e) => error!("爬取任务失败！{}", e),
+        Err(e) => {
+            error!("爬取任务失败！{}", e);
+            return;
+        }
     }
     match remove_duplicate_arcades().await {
         Ok(_) => {
             info!("清理数据库完成！");
-            match backup_database().await {
-                Ok(_) => info!("备份数据库成功！"),
-                Err(e) => error!("备份数据库失败！{}", e),
-            }
         }
         Err(e) => {
-            error!("清理数据库失败！{}", e)
+            error!("清理数据库失败！{}", e);
+            return;
         }
+    }
+    match backup_database().await {
+        Ok(_) => info!("备份数据库成功！"),
+        Err(e) => error!("备份数据库失败！{}", e),
     }
 }
 
