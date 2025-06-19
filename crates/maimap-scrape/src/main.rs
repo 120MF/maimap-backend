@@ -1,57 +1,26 @@
 mod cleanup;
+mod geo_location;
 
 use headless_chrome::{Browser, LaunchOptions, Tab};
+use std::collections::{HashMap, HashSet};
 
 use maimap_utils::backup::backup_database;
 use maimap_utils::db::{
     DateTime, Decimal128, ensure_mongodb_connected, get_max_arcade_id, insert_many_arcades,
 };
-use maimap_utils::env::{check_required_env_vars, qmap_key};
+use maimap_utils::env::check_required_env_vars;
 use maimap_utils::errors::{AppError, Context, Result};
-use maimap_utils::types::{Arcade, Point};
+use maimap_utils::types::Arcade;
 
-use crate::cleanup::remove_duplicate_arcades;
+use crate::cleanup::{
+    convert_lat_lng_to_decimal128, convert_null_dead_to_bool, remove_duplicate_arcades,
+};
+use crate::geo_location::{GeoLocation, get_geo_location};
 use scraper::{Html, Selector};
-use serde::Deserialize;
-use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::{error, info};
 
-#[derive(Deserialize)]
-struct GeocoderResponse {
-    message: String,
-    status: i32,
-    result: Option<GeocoderResult>,
-}
-
-#[derive(Deserialize)]
-struct GeocoderResult {
-    location: GeoLocation,
-}
-
-#[derive(Deserialize, Clone)]
-struct GeoLocation {
-    lat: f64,
-    lng: f64,
-}
-
-impl GeoLocation {
-    fn to_point(&self) -> Point {
-        Point::new(self.lng, self.lat)
-    }
-}
-impl Default for GeoLocation {
-    fn default() -> Self {
-        Self { lat: 0.0, lng: 0.0 }
-    }
-}
-
-impl Display for GeoLocation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{},{}", self.lat, self.lng)
-    }
-}
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().init();
@@ -59,16 +28,6 @@ async fn main() {
     info!("执行定时爬取华立机厅任务");
     check_required_env_vars();
     ensure_mongodb_connected().await;
-
-    match scrape_arcades().await {
-        Ok(_) => {
-            info!("爬取任务成功！");
-        }
-        Err(e) => {
-            error!("爬取任务失败！{}", e);
-            return;
-        }
-    }
     match remove_duplicate_arcades().await {
         Ok(_) => {
             info!("清理数据库完成！");
@@ -78,6 +37,34 @@ async fn main() {
             return;
         }
     }
+    match convert_lat_lng_to_decimal128().await {
+        Ok(_) => {
+            info!("转换经纬度数据成功！");
+        }
+        Err(e) => {
+            error!("转换经纬度数据失败！{}", e);
+            return;
+        }
+    }
+    match convert_null_dead_to_bool().await {
+        Ok(_) => {
+            info!("转换 arcade_dead 数据成功！");
+        }
+        Err(e) => {
+            error!("转换 arcade_dead 数据失败！{}", e);
+            return;
+        }
+    }
+    match scrape_arcades().await {
+        Ok(_) => {
+            info!("爬取任务成功！");
+        }
+        Err(e) => {
+            error!("爬取任务失败！{}", e);
+            return;
+        }
+    }
+
     match backup_database().await {
         Ok(_) => info!("备份数据库成功！"),
         Err(e) => error!("备份数据库失败！{}", e),
@@ -102,13 +89,26 @@ pub async fn scrape_arcades() -> Result<()> {
         wait_for_store_list(&tab).context("等待store_list加载失败")?;
         content = tab.get_content().context("获取页面content失败")?;
     }
-    match parse_store_list(&content).await {
-        Ok(arcades) => match insert_many_arcades(arcades).await {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.into()),
-        },
-        Err(e) => Err(e),
+
+    let existing_arcades = get_existing_arcades().await?;
+    info!("从数据库获取到 {} 个已存在机厅", existing_arcades.len());
+
+    let web_arcades = parse_all_store_list(&content).await?;
+    info!("从网站解析到 {} 个机厅", web_arcades.len());
+    process_arcade_data(existing_arcades, web_arcades).await
+}
+
+async fn get_existing_arcades() -> Result<HashMap<String, Arcade>> {
+    use maimap_utils::db::get_all_arcades;
+
+    let arcades = get_all_arcades().await?;
+    let mut arcade_map = HashMap::new();
+
+    for arcade in arcades {
+        arcade_map.insert(arcade.arcade_name.clone(), arcade);
     }
+
+    Ok(arcade_map)
 }
 
 fn wait_for_store_list(tab: &Tab) -> Result<()> {
@@ -120,79 +120,19 @@ fn wait_for_store_list(tab: &Tab) -> Result<()> {
     Ok(())
 }
 
-async fn get_geo_location(address: &str) -> Result<GeoLocation> {
-    let client = reqwest::Client::new();
-    let max_retries = 3;
-    let base_delay = Duration::from_secs(2);
-    let mut use_policy = false;
-
-    for attempt in 0..=max_retries {
-        let key = qmap_key();
-        let mut params = vec![("address", address), ("key", &key)];
-
-        // 如果需要添加policy参数
-        if use_policy {
-            params.push(("policy", "1"));
-        }
-
-        let response = client
-            .get("https://apis.map.qq.com/ws/geocoder/v1/")
-            .query(&params)
-            .send()
-            .await?;
-
-        let geocoder_response: GeocoderResponse = response.json().await?;
-
-        if geocoder_response.status == 0 {
-            if let Some(result) = geocoder_response.result {
-                return Ok(result.location);
-            }
-        } else if geocoder_response.status == 348 && !use_policy {
-            use_policy = true;
-            info!("收到状态码348，添加policy=1参数并立即重试");
-            continue;
-        } else if attempt < max_retries {
-            let delay = base_delay.mul_f32(1.5_f32.powi(attempt as i32));
-            info!(
-                "地址解析失败，状态码: {}，消息: {}，将在 {:?} 后重试 ({}/{})",
-                geocoder_response.status,
-                geocoder_response.message,
-                delay,
-                attempt + 1,
-                max_retries
-            );
-
-            tokio::time::sleep(delay).await;
-            continue;
-        }
-
-        return Err(AppError::Geocoder(geocoder_response.message).into());
-    }
-
-    unreachable!("重试循环应该返回结果或错误");
-}
-async fn parse_store_list(html: &str) -> Result<Vec<Arcade>> {
-    let time = DateTime::now();
-
+async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String, GeoLocation)>> {
     let document = Html::parse_document(html);
-    let mut arcades = Vec::new();
+    let mut arcade_info = Vec::new();
+
     let ul_selector = Selector::parse(".store_list").map_err(|e| AppError::Parse(e.to_string()))?;
     let li_selector = Selector::parse("li").map_err(|e| AppError::Parse(e.to_string()))?;
-
     let store_name_selector =
         Selector::parse("span.store_name").map_err(|e| AppError::Parse(e.to_string()))?;
     let store_address_selector =
         Selector::parse("span.store_address").map_err(|e| AppError::Parse(e.to_string()))?;
-    let max_id = get_max_arcade_id().await?;
-    info!("max_id: {}", max_id);
 
-    let mut id_counter: i32 = 0;
-    for (_, store_list) in document.select(&ul_selector).enumerate() {
+    for store_list in document.select(&ul_selector) {
         for li in store_list.select(&li_selector) {
-            id_counter += 1;
-            if id_counter <= max_id {
-                continue; // 只从已有机厅id最大处开始爬取
-            }
             let store_name = li
                 .select(&store_name_selector)
                 .next()
@@ -206,15 +146,69 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>> {
                 .ok_or_else(|| AppError::Parse("store_address".to_string()))?;
 
             let location = get_geo_location(&store_address).await?;
-            info!(
-                "\n爬取到新机厅：\n{}\n{}\n{}\n{}\n\n",
-                id_counter, store_name, store_address, location,
-            );
+
+            arcade_info.push((store_name, store_address, location));
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+        }
+    }
+
+    Ok(arcade_info)
+}
+
+async fn process_arcade_data(
+    existing_arcades: HashMap<String, Arcade>,
+    web_arcades: Vec<(String, String, GeoLocation)>,
+) -> Result<()> {
+    let time = DateTime::now();
+    let max_id = get_max_arcade_id().await?;
+
+    // 用于标记数据库中已处理的机厅
+    let mut processed_arcade_names = HashSet::new();
+    let mut arcades_to_update = Vec::new();
+    let mut new_arcades = Vec::new();
+    let mut id_counter = max_id;
+
+    // 处理网站上的机厅
+    for (name, address, location) in web_arcades {
+        if let Some(existing) = existing_arcades.get(&name) {
+            // 机厅已存在，检查是否需要更新
+            processed_arcade_names.insert(name.clone());
+
+            let existing_loc = GeoLocation {
+                lat: existing.arcade_lat.to_string().parse()?,
+                lng: existing.arcade_lng.to_string().parse()?,
+            };
+
+            if existing.arcade_address != address
+                || (existing_loc.lat - location.lat).abs() > 0.0001
+                || (existing_loc.lng - location.lng).abs() > 0.0001
+                || existing.arcade_dead
+            {
+                // 需要更新的机厅
+                let updated = Arcade {
+                    arcade_id: existing.arcade_id,
+                    arcade_name: existing.arcade_name.clone(),
+                    arcade_address: address, // 直接使用新地址
+                    arcade_dead: false,      // 直接设置为false
+                    arcade_cost: existing.arcade_cost,
+                    arcade_count: existing.arcade_count,
+                    arcade_lat: Decimal128::from_str(&location.lat.to_string())?,
+                    arcade_lng: Decimal128::from_str(&location.lng.to_string())?,
+                    arcade_pos: Some(location.to_point()),
+                    created_at: existing.created_at,
+                };
+
+                arcades_to_update.push(updated);
+                info!("更新机厅：ID {}，名称 {}", existing.arcade_id, name);
+            }
+        } else {
+            // 新机厅
+            id_counter += 1;
 
             let arcade = Arcade {
                 arcade_id: id_counter,
-                arcade_name: store_name,
-                arcade_address: store_address,
+                arcade_name: name.clone(),
+                arcade_address: address,
                 arcade_dead: false,
                 arcade_cost: None,
                 arcade_count: None,
@@ -223,9 +217,63 @@ async fn parse_store_list(html: &str) -> Result<Vec<Arcade>> {
                 arcade_pos: Some(location.to_point()),
                 created_at: time,
             };
-            arcades.push(arcade);
-            tokio::time::sleep(Duration::from_millis(1000)).await; //腾讯地图免费API并发调用限制 3次/s
+
+            new_arcades.push(arcade);
+            info!("新增机厅：ID {}，名称 {}", id_counter, name);
         }
     }
-    Ok(arcades)
+
+    // 标记已关闭的机厅
+    let mut closed_arcades = Vec::new();
+    for (name, arcade) in &existing_arcades {
+        if !processed_arcade_names.contains(name) && !arcade.arcade_dead {
+            let closed = Arcade {
+                arcade_id: arcade.arcade_id,
+                arcade_name: arcade.arcade_name.clone(),
+                arcade_address: arcade.arcade_address.clone(),
+                arcade_dead: true, // 直接设置为true
+                arcade_cost: arcade.arcade_cost,
+                arcade_count: arcade.arcade_count,
+                arcade_lat: arcade.arcade_lat,
+                arcade_lng: arcade.arcade_lng,
+                arcade_pos: arcade.arcade_pos.clone(),
+                created_at: arcade.created_at,
+            };
+            closed_arcades.push(closed);
+            info!("标记已关闭机厅：ID {}，名称 {}", arcade.arcade_id, name);
+        }
+    }
+
+    // 执行数据库操作
+    let arcades_to_update_len = arcades_to_update.len();
+    if !arcades_to_update.is_empty() {
+        update_arcades(&arcades_to_update).await?;
+    }
+
+    let new_arcades_len = new_arcades.len();
+    if !new_arcades.is_empty() {
+        insert_many_arcades(new_arcades).await?;
+    }
+
+    let closed_arcades_len = closed_arcades.len();
+    if !closed_arcades.is_empty() {
+        update_arcades(&closed_arcades).await?;
+    }
+
+    info!(
+        "处理完成：更新 {} 个机厅，新增 {} 个机厅，标记关闭 {} 个机厅",
+        arcades_to_update_len, new_arcades_len, closed_arcades_len
+    );
+
+    Ok(())
+}
+
+async fn update_arcades(arcades: &[Arcade]) -> Result<()> {
+    use maimap_utils::db::update_arcade;
+
+    for arcade in arcades {
+        update_arcade(arcade).await?;
+    }
+
+    Ok(())
 }

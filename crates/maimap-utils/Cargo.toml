@@ -18,6 +18,7 @@ tracing = { workspace = true }
 ali-oss-rs = { version = "0.2" }
 thiserror = "2.0"
 anyhow = "1.0"
+futures-util = "0.3.31"
 
 [lints]
 workspace = true

@@ -1,8 +1,10 @@
 use crate::env::{DB_NAME, database_uri, test_database_uri};
+use futures_util::stream::StreamExt;
 
 use anyhow::Result;
 
 pub use crate::types::Arcade;
+pub use mongodb::bson::Bson;
 pub use mongodb::bson::Bson::Int32;
 pub use mongodb::bson::Bson::ObjectId;
 pub use mongodb::bson::DateTime;
@@ -61,5 +63,42 @@ pub async fn insert_many_arcades(arcades: Vec<Arcade>) -> Result<(), mongodb::er
     let client = get_mongodb_client();
     let collection: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
     collection.insert_many(arcades).await?;
+    Ok(())
+}
+
+pub async fn get_all_arcades() -> Result<Vec<Arcade>> {
+    let client = get_mongodb_client();
+    let collection: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
+
+    let find_options = mongodb::options::FindOptions::builder()
+        .sort(doc! { "arcade_id": 1 })
+        .build();
+
+    let mut cursor = collection.find(doc! {}).with_options(find_options).await?;
+    let mut arcades = Vec::new();
+    while let Some(result) = cursor.next().await {
+        let arcade = result?;
+        arcades.push(arcade);
+    }
+
+    Ok(arcades)
+}
+
+pub async fn update_arcade(arcade: &Arcade) -> Result<()> {
+    let client = get_mongodb_client();
+    let collection: Collection<Arcade> = client.database(DB_NAME).collection("arcades");
+
+    let filter = doc! { "arcade_id": arcade.arcade_id };
+
+    // 使用整个文档进行替换，保留 _id 字段
+    let result = collection.replace_one(filter, arcade).await?;
+
+    if result.matched_count == 0 {
+        return Err(anyhow::anyhow!(
+            "未找到要更新的机厅：ID {}",
+            arcade.arcade_id
+        ));
+    }
+
     Ok(())
 }
