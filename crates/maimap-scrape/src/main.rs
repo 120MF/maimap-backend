@@ -15,7 +15,7 @@ use maimap_utils::types::Arcade;
 use crate::cleanup::{
     convert_lat_lng_to_decimal128, convert_null_dead_to_bool, remove_duplicate_arcades,
 };
-use crate::geo_location::{GeoLocation, get_geo_location};
+use crate::geo_location::get_geo_location;
 use scraper::{Html, Selector};
 use std::str::FromStr;
 use std::time::Duration;
@@ -120,7 +120,7 @@ fn wait_for_store_list(tab: &Tab) -> Result<()> {
     Ok(())
 }
 
-async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String, GeoLocation)>> {
+async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String)>> {
     let document = Html::parse_document(html);
     let mut arcade_info = Vec::new();
 
@@ -145,10 +145,7 @@ async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String, GeoLoca
                 .map(|el| el.text().collect::<String>().trim().to_string())
                 .ok_or_else(|| AppError::Parse("store_address".to_string()))?;
 
-            let location = get_geo_location(&store_address).await?;
-
-            arcade_info.push((store_name, store_address, location));
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            arcade_info.push((store_name, store_address));
         }
     }
 
@@ -157,7 +154,7 @@ async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String, GeoLoca
 
 async fn process_arcade_data(
     existing_arcades: HashMap<String, Arcade>,
-    web_arcades: Vec<(String, String, GeoLocation)>,
+    web_arcades: Vec<(String, String)>,
 ) -> Result<()> {
     let time = DateTime::now();
     let max_id = get_max_arcade_id().await?;
@@ -169,27 +166,22 @@ async fn process_arcade_data(
     let mut id_counter = max_id;
 
     // 处理网站上的机厅
-    for (name, address, location) in web_arcades {
+    for (name, address) in web_arcades {
         if let Some(existing) = existing_arcades.get(&name) {
-            // 机厅已存在，检查是否需要更新
+            // 机厅已存在，检查地址是否变化或机厅是否已关闭
             processed_arcade_names.insert(name.clone());
 
-            let existing_loc = GeoLocation {
-                lat: existing.arcade_lat.to_string().parse()?,
-                lng: existing.arcade_lng.to_string().parse()?,
-            };
+            if existing.arcade_address != address || existing.arcade_dead {
+                // 地址有变动或机厅被重新激活，需要获取新的地理位置并更新
+                info!("机厅地址或状态有变，准备更新: {}", name);
+                let location = get_geo_location(&address).await?;
+                tokio::time::sleep(Duration::from_millis(1000)).await;
 
-            if existing.arcade_address != address
-                || (existing_loc.lat - location.lat).abs() > 0.0001
-                || (existing_loc.lng - location.lng).abs() > 0.0001
-                || existing.arcade_dead
-            {
-                // 需要更新的机厅
                 let updated = Arcade {
                     arcade_id: existing.arcade_id,
                     arcade_name: existing.arcade_name.clone(),
-                    arcade_address: address, // 直接使用新地址
-                    arcade_dead: false,      // 直接设置为false
+                    arcade_address: address,
+                    arcade_dead: false,
                     arcade_cost: existing.arcade_cost,
                     arcade_count: existing.arcade_count,
                     arcade_lat: Decimal128::from_str(&location.lat.to_string())?,
@@ -202,7 +194,11 @@ async fn process_arcade_data(
                 info!("更新机厅：ID {}，名称 {}", existing.arcade_id, name);
             }
         } else {
-            // 新机厅
+            // 新机厅，需要获取地理位置
+            info!("发现新机厅，准备获取地理位置: {}", name);
+            let location = get_geo_location(&address).await?;
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+
             id_counter += 1;
 
             let arcade = Arcade {
@@ -231,7 +227,7 @@ async fn process_arcade_data(
                 arcade_id: arcade.arcade_id,
                 arcade_name: arcade.arcade_name.clone(),
                 arcade_address: arcade.arcade_address.clone(),
-                arcade_dead: true, // 直接设置为true
+                arcade_dead: true,
                 arcade_cost: arcade.arcade_cost,
                 arcade_count: arcade.arcade_count,
                 arcade_lat: arcade.arcade_lat,
