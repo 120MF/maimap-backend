@@ -2,6 +2,8 @@ name: maimap-backend-docker-ci
 
 on:
   push:
+    tags:
+      - 'v*'
 
   workflow_dispatch:
 

@@ -1605,7 +1605,7 @@ dependencies = [
 
 [[package]]
 name = "maimap-derive"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "quote",
  "syn 2.0.100",
@@ -1613,7 +1613,7 @@ dependencies = [
 
 [[package]]
 name = "maimap-scrape"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures",
  "headless_chrome",
@@ -1628,7 +1628,7 @@ dependencies = [
 
 [[package]]
 name = "maimap-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "maimap-utils",
  "openssl",
@@ -1642,7 +1642,7 @@ dependencies = [
 
 [[package]]
 name = "maimap-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ali-oss-rs",
  "anyhow",
