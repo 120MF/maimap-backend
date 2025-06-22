@@ -3,7 +3,7 @@ FROM rust:1.86-alpine3.21 AS build
 WORKDIR /app
 
 # 安装构建依赖
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev perl make git && \
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev perl make git
 
 # 分层缓存构建依赖
 COPY Cargo.toml Cargo.lock ./
