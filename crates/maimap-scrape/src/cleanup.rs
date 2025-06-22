@@ -7,6 +7,20 @@ use maimap_utils::errors::{AppError, Result};
 use std::str::FromStr;
 use tracing::info;
 
+pub(crate) fn normalize_name(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            // 将全角ASCII字符（！到～）转换为半角
+            '\u{FF01}'..='\u{FF5E}' => unsafe { char::from_u32_unchecked((c as u32) - 0xFEE0) },
+            // 将全角空格转换成半角空格
+            '\u{3000}' => ' ',
+            _ => c,
+        })
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
 pub(crate) async fn convert_null_dead_to_bool() -> Result<u64> {
     ensure_mongodb_connected().await;
 

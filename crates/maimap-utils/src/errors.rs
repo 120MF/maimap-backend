@@ -36,6 +36,9 @@ pub enum AppError {
     #[error("解析内容失败：{0}")]
     Parse(String),
 
+    #[error("爬取内容失败：{0}")]
+    Scrape(String),
+
     #[error("调用腾讯地图API解析地址失败：{0}")]
     Geocoder(String),
 }

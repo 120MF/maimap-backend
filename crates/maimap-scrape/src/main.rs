@@ -1,6 +1,9 @@
+use std::str::FromStr;
 mod cleanup;
+mod export_hashmap;
 mod geo_location;
 
+use crate::geo_location::get_geo_location;
 use headless_chrome::{Browser, LaunchOptions, Tab};
 use std::collections::{HashMap, HashSet};
 
@@ -13,13 +16,13 @@ use maimap_utils::errors::{AppError, Context, Result};
 use maimap_utils::types::Arcade;
 
 use crate::cleanup::{
-    convert_lat_lng_to_decimal128, convert_null_dead_to_bool, remove_duplicate_arcades,
+    convert_lat_lng_to_decimal128, convert_null_dead_to_bool, normalize_name,
+    remove_duplicate_arcades,
 };
-use crate::geo_location::get_geo_location;
+use crate::export_hashmap::export_arcade_names_to_files;
 use scraper::{Html, Selector};
-use std::str::FromStr;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -95,6 +98,9 @@ pub async fn scrape_arcades() -> Result<()> {
 
     let web_arcades = parse_all_store_list(&content).await?;
     info!("从网站解析到 {} 个机厅", web_arcades.len());
+
+    export_arcade_names_to_files(&existing_arcades, &web_arcades).await?;
+
     process_arcade_data(existing_arcades, web_arcades).await
 }
 
@@ -104,20 +110,76 @@ async fn get_existing_arcades() -> Result<HashMap<String, Arcade>> {
     let arcades = get_all_arcades().await?;
     let mut arcade_map = HashMap::new();
 
-    for arcade in arcades {
-        arcade_map.insert(arcade.arcade_name.clone(), arcade);
+    for mut arcade in arcades {
+        let normalized_name = normalize_name(&arcade.arcade_name);
+        if arcade_map.contains_key(&normalized_name) {
+            warn!(
+                "发现规范化后重复的机厅名称: '{}' (原名: '{}'), 将跳过此条目。",
+                normalized_name, arcade.arcade_name
+            );
+            continue;
+        }
+        arcade.arcade_name = normalized_name.clone();
+        arcade_map.insert(normalized_name, arcade);
     }
 
     Ok(arcade_map)
 }
 
 fn wait_for_store_list(tab: &Tab) -> Result<()> {
-    tab.wait_for_element(".store_list")?;
-    tab.reload(false, None)?;
-    tab.wait_for_element(".store_list")?;
-    std::thread::sleep(Duration::from_secs(5));
+    const MIN_ARCADES: usize = 2000;
+    const MAX_RETRIES: u32 = 5;
+    const POLLING_TIMEOUT: Duration = Duration::from_secs(90);
+    const POLLING_INTERVAL: Duration = Duration::from_secs(2);
 
-    Ok(())
+    for attempt in 1..=MAX_RETRIES {
+        info!("开始加载机厅列表 (尝试 {}/{})", attempt, MAX_RETRIES);
+
+        if attempt > 1 {
+            info!("机厅数量不足，重新加载页面...");
+            tab.reload(false, None).context("页面重新加载失败")?;
+            tab.wait_until_navigated()
+                .context("等待页面重新加载后导航失败")?;
+        }
+
+        tab.wait_for_element_with_custom_timeout(".store_list", Duration::from_secs(60))
+            .context("等待 .store_list 容器元素超时")?;
+        info!("列表容器已出现，开始轮询检查机厅数量...");
+
+        let start_time = std::time::Instant::now();
+        loop {
+            let js_script = "document.querySelectorAll('.store_list li').length";
+            let result = tab
+                .evaluate(js_script, false)
+                .context("执行 JavaScript 数量检查失败")?;
+            let count = match result.value {
+                Some(serde_json::Value::Number(n)) => n.as_u64().unwrap_or(0) as usize,
+                _ => 0,
+            };
+            if count >= MIN_ARCADES {
+                info!("成功加载 {} 个机厅，数量符合预期。", count);
+                return Ok(());
+            }
+            if start_time.elapsed() > POLLING_TIMEOUT {
+                warn!(
+                    "轮询超时 ({}s)，当前加载了 {} 个机厅，未达到 {} 个。准备重试...",
+                    POLLING_TIMEOUT.as_secs(),
+                    count,
+                    MIN_ARCADES
+                );
+                break;
+            }
+
+            info!("当前已加载 {}/{} 个机厅，继续等待...", count, MIN_ARCADES);
+            std::thread::sleep(POLLING_INTERVAL);
+        }
+    }
+
+    Err(AppError::Scrape(format!(
+        "经过 {} 次尝试后，仍未能加载到至少 {} 个机厅。",
+        MAX_RETRIES, MIN_ARCADES
+    ))
+    .into())
 }
 
 async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String)>> {
@@ -133,11 +195,13 @@ async fn parse_all_store_list(html: &str) -> Result<Vec<(String, String)>> {
 
     for store_list in document.select(&ul_selector) {
         for li in store_list.select(&li_selector) {
-            let store_name = li
+            let store_name_raw = li
                 .select(&store_name_selector)
                 .next()
-                .map(|el| el.text().collect::<String>().trim().to_string())
+                .map(|el| el.text().collect::<String>())
                 .ok_or_else(|| AppError::Parse("store_name".to_string()))?;
+
+            let store_name = normalize_name(&store_name_raw);
 
             let store_address = li
                 .select(&store_address_selector)
@@ -173,7 +237,10 @@ async fn process_arcade_data(
 
             if existing.arcade_address != address || existing.arcade_dead {
                 // 地址有变动或机厅被重新激活，需要获取新的地理位置并更新
-                info!("机厅地址或状态有变，准备更新: {}", name);
+                info!(
+                    "机厅地址或状态有变，准备更新: {}，旧地址：{}，新地址：{}，先前存活情况：{}",
+                    name, existing.arcade_address, address, existing.arcade_dead
+                );
                 let location = get_geo_location(&address).await?;
                 tokio::time::sleep(Duration::from_millis(1000)).await;
 
@@ -191,7 +258,7 @@ async fn process_arcade_data(
                 };
 
                 arcades_to_update.push(updated);
-                info!("更新机厅：ID {}，名称 {}", existing.arcade_id, name);
+                info!("更新完成");
             }
         } else {
             // 新机厅，需要获取地理位置
