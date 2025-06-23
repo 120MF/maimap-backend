@@ -235,11 +235,11 @@ async fn process_arcade_data(
             // 机厅已存在，检查地址是否变化或机厅是否已关闭
             processed_arcade_names.insert(name.clone());
 
-            if existing.arcade_address != address || existing.arcade_dead {
-                // 地址有变动或机厅被重新激活，需要获取新的地理位置并更新
+            if existing.arcade_address != address {
+                // 地址有变动，需要获取新的地理位置
                 info!(
-                    "机厅地址或状态有变，准备更新: {}，旧地址：{}，新地址：{}，先前存活情况：{}",
-                    name, existing.arcade_address, address, existing.arcade_dead
+                    "机厅地址或状态有变，准备更新: {}，旧地址：{}，新地址：{}",
+                    name, existing.arcade_address, address
                 );
                 let location = get_geo_location(&address).await?;
                 tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -248,7 +248,7 @@ async fn process_arcade_data(
                     arcade_id: existing.arcade_id,
                     arcade_name: existing.arcade_name.clone(),
                     arcade_address: address,
-                    arcade_dead: false,
+                    arcade_dead: existing.arcade_dead,
                     arcade_cost: existing.arcade_cost,
                     arcade_count: existing.arcade_count,
                     arcade_lat: Decimal128::from_str(&location.lat.to_string())?,
